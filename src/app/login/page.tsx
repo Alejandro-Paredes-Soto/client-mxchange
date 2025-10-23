@@ -8,9 +8,10 @@ import { getRates } from '../services/api';
 import { FcGoogle } from "react-icons/fc";
 import { MdAutorenew } from "react-icons/md";
 
+
 const Login = () => {
-  const { 
-    activeForm,
+
+  const { activeForm,
     loadingLogin,
     loadingGoogle,
     loadingRegister,
@@ -19,8 +20,7 @@ const Login = () => {
     handleOnchangeLogin,
     handleOnchangeRegister,
     onSubmitRegister,
-    onSubmitLogin 
-  } = useLogin();
+    onSubmitLogin } = useLogin();
 
   const { onRouterLink } = useUtils();
 
@@ -41,7 +41,6 @@ const Login = () => {
   let inputCurrency = '';
   let outputCurrency = '';
   let operationText = '';
-  
   if (operation === 'buyUsd') {
     currentRate = rates.buy;
     inputCurrency = 'MXN';
@@ -55,6 +54,8 @@ const Login = () => {
   }
 
   useEffect(() => {
+    // Para comprar USD (input MXN) dividimos por la tasa de compra.
+    // Para vender USD (input USD) multiplicamos por la tasa de venta.
     if (operation === 'buyUsd') {
       setOutputAmount(inputAmount / currentRate);
     } else {
@@ -63,226 +64,212 @@ const Login = () => {
   }, [inputAmount, operation, rates, currentRate]);
 
   return (
-    <div className="flex sm:flex-row flex-col justify-center items-center gap-4 sm:gap-8 bg-white p-4 sm:p-8 md:p-12 w-full min-h-screen">
-      {/* Login Card */}
-      <div className="bg-white shadow-lg sm:shadow-xl p-6 sm:p-8 md:p-10 rounded-2xl w-full max-w-md lg:max-w-lg">
-        <div className="mb-6 sm:mb-8">
-          <div className="mb-2 font-bold text-primary text-3xl sm:text-4xl text-center">
-            <h1>M<span className="text-secondary text-4xl sm:text-5xl">X</span>ange</h1>
-            <p className="mt-2 font-light text-gray-600 text-sm sm:text-base">Compra y vende divisas al mejor precio</p>
+    <div className="flex sm:flex-row flex-col justify-center items-center gap-8 bg-white p-[50px] sm:p-[30px] sm:px-[20px] w-full min-h-screen" >
+      <div className="bg-white shadow-[0_10px_30px_rgba(0,0,0,0.1)] p-[40px] border border-[#f0f0f0] rounded-[20px] w-full max-w-[500px] text-center">
+        <div className="mb-[30px]">
+          <div className="mb-[5px] font-bold text-[2.5rem] text-primary sm:text-[2rem]">
+            <h1>M<span className="text-[3rem] text-secondary sm:text-[2.5rem]">X</span>ange</h1>
+
+            <p className="mb-[20px] font-light text-gray-custom">Compra y vende divisas al mejor precio</p>
           </div>
 
-          {/* Form Toggle */}
-          <div className="flex bg-green-50 mb-6 sm:mb-8 p-1 rounded-2xl">
+
+
+          <div className="flex bg-light-green mb-[30px] p-[4px] rounded-[25px]">
             <button
-              className={`flex-1 py-2 sm:py-3 px-4 rounded-2xl bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 border-none text-sm sm:text-base ${
-                activeForm === "login" ? "bg-white shadow-md" : ""
-              }`}
+              className={`flex-1 p-[12px_20px] rounded-[20px] bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 ease-in-out font-['Roboto'] border-none ${activeForm === "login" ? "bg-white shadow-[0_2px_10px_rgba(0,0,0,0.1)]" : ""
+                }`}
               onClick={() => setActiveForm("login")}
             >
               Iniciar Sesión
             </button>
             <button
-              className={`flex-1 py-2 sm:py-3 px-4 rounded-2xl bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 border-none text-sm sm:text-base ${
-                activeForm === "register" ? "bg-white shadow-md" : ""
-              }`}
+              className={`flex-1 p-[12px_20px] rounded-[20px] bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 ease-in-out font-['Roboto'] border-none ${activeForm === "register" ? "bg-white shadow-[0_2px_10px_rgba(0,0,0,0.1)]" : ""
+                }`}
               onClick={() => setActiveForm("register")}
             >
               Registrarse
             </button>
           </div>
 
-          {/* Forms */}
           <div className="relative overflow-hidden">
             {activeForm === "login" ? (
-              <form className="block" onSubmit={onSubmitLogin}>
-                <div className="mb-4 sm:mb-5 text-left">
-                  <label className="block mb-2 font-medium text-primary text-sm sm:text-base">Email o Teléfono</label>
+              <form
+                className="block"
+                onSubmit={onSubmitLogin}
+              >
+                <div className="mb-[20px] text-left">
+                  <label className="block mb-[8px] font-medium text-primary">Email o Teléfono</label>
                   <input
                     type="text"
                     placeholder="Ingresa tu email o teléfono"
                     name="email"
                     required
                     onChange={handleOnchangeLogin}
-                    className="p-3 sm:p-4 border-2 border-green-200 focus:border-secondary rounded-xl focus:outline-none w-full text-sm sm:text-base transition duration-300"
+                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
                   />
                 </div>
-                <div className="mb-4 sm:mb-5 text-left">
-                  <label className="block mb-2 font-medium text-primary text-sm sm:text-base">Contraseña</label>
+                <div className="mb-[20px] text-left">
+                  <label className="block mb-[8px] font-medium text-primary">Contraseña</label>
                   <input
                     type="password"
                     name="password"
                     placeholder="Ingresa tu contraseña"
                     onChange={handleOnchangeLogin}
                     required
-                    className="p-3 sm:p-4 border-2 border-green-200 focus:border-secondary rounded-xl focus:outline-none w-full text-sm sm:text-base transition duration-300"
+                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
                   />
                 </div>
-                <button
-                  disabled={loadingLogin}
-                  type="submit"
-                  className="bg-gradient-to-r from-primary hover:from-primary to-accent hover:to-accent disabled:opacity-50 hover:shadow-lg p-3 sm:p-4 border-none rounded-xl w-full font-medium text-white text-sm sm:text-base transition-all hover:-translate-y-0.5 duration-300 cursor-pointer"
-                >
+                <button disabled={loadingLogin} type="submit" className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent disabled:opacity-50 hover:shadow-[0_5px_20px_rgba(104,224,127,0.4)] p-[15px] border-none rounded-[10px] w-full font-['Roboto'] font-medium text-[16px] text-white transition-all hover:-translate-y-[2px] duration-300 ease-in-out cursor-pointer">
                   {loadingLogin ? (
-                    <MdAutorenew size={20} className="mx-auto animate-spin" />
+                    <MdAutorenew size={20} className="m-auto the-spinner" />
                   ) : (
-                    "Iniciar Sesión"
-                  )}
+                    <>
+
+                      Iniciar Sesión
+                    </>)
+
+                  }
                 </button>
-                <div className="mt-4 sm:mt-5 text-center">
-                  <a
-                    role="button"
-                    className="text-secondary hover:text-primary text-xs sm:text-sm no-underline cursor-pointer"
-                    onClick={() => onRouterLink('/forgotpassword')}
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </a>
+                <div className="mt-[20px] text-center">
+                  <a role="button" className="text-[14px] text-secondary hover:text-primary no-underline cursor-pointer" onClick={() => onRouterLink('/forgotpassword')}>¿Olvidaste tu contraseña?</a>
                 </div>
               </form>
             ) : (
               <form className={activeForm === "register" ? "block" : "hidden"} onSubmit={onSubmitRegister}>
-                <div className="mb-4 sm:mb-5 text-left">
-                  <label className="block mb-2 font-medium text-primary text-sm sm:text-base">Nombre Completo</label>
+                <div className="mb-[20px] text-left">
+                  <label className="block mb-[8px] font-medium text-primary">Nombre Completo</label>
                   <input
                     type="text"
                     placeholder="Ingresa tu nombre completo"
                     required
                     name="name"
                     onChange={handleOnchangeRegister}
-                    className="p-3 sm:p-4 border-2 border-green-200 focus:border-secondary rounded-xl focus:outline-none w-full text-sm sm:text-base transition duration-300"
+                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
                   />
                 </div>
-                <div className="mb-4 sm:mb-5 text-left">
-                  <label className="block mb-2 font-medium text-primary text-sm sm:text-base">Email</label>
+                <div className="mb-[20px] text-left">
+                  <label className="block mb-[8px] font-medium text-primary">Email</label>
                   <input
                     type="email"
                     placeholder="Ingresa tu email"
                     required
                     name="email"
                     onChange={handleOnchangeRegister}
-                    className="p-3 sm:p-4 border-2 border-green-200 focus:border-secondary rounded-xl focus:outline-none w-full text-sm sm:text-base transition duration-300"
+                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
                   />
                 </div>
-                <div className="mb-4 sm:mb-5 text-left">
-                  <label className="block mb-2 font-medium text-primary text-sm sm:text-base">Contraseña</label>
+
+                <div className="mb-[20px] text-left">
+                  <label className="block mb-[8px] font-medium text-primary">Contraseña</label>
                   <input
                     type="password"
                     placeholder="Crea una contraseña segura"
                     required
                     name="password"
                     onChange={handleOnchangeRegister}
-                    className="p-3 sm:p-4 border-2 border-green-200 focus:border-secondary rounded-xl focus:outline-none w-full text-sm sm:text-base transition duration-300"
+                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
                   />
                 </div>
-                <button
-                  type="submit"
-                  disabled={loadingRegister}
-                  className="bg-gradient-to-r from-primary hover:from-primary to-accent hover:to-accent disabled:opacity-50 hover:shadow-lg p-3 sm:p-4 border-none rounded-xl w-full font-medium text-white text-sm sm:text-base transition-all hover:-translate-y-0.5 duration-300 cursor-pointer"
-                >
+                <button type="submit" disabled={loadingRegister} className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent disabled:opacity-50 hover:shadow-[0_5px_20px_rgba(104,224,127,0.4)] p-[15px] border-none rounded-[10px] w-full font-['Roboto'] font-medium text-[16px] text-white transition-all hover:-translate-y-[2px] duration-300 ease-in-out cursor-pointer">
                   {loadingRegister ? (
-                    <MdAutorenew size={20} className="mx-auto animate-spin" />
+                    <MdAutorenew size={20} className="m-auto the-spinner" />
                   ) : (
-                    "Crear Cuenta"
-                  )}
+                    <>
+
+                      Crear Cuenta
+                    </>)
+
+                  }
                 </button>
               </form>
             )}
+
+
+
           </div>
 
-          {/* Divider */}
-          <div className="relative my-6 sm:my-8 text-center">
-            <span className="bg-white px-4 text-gray-600 text-xs sm:text-sm">o continúa con</span>
+          <div className="relative my-[30px] text-center">
+            <span className="bg-white px-[20px] text-[14px] text-gray-custom">o continúa con</span>
           </div>
 
-          {/* Google Login */}
-          <div className="flex gap-3 sm:gap-4 mb-4 sm:mb-5">
-            <button
-              disabled={loadingGoogle}
-              className="flex flex-1 justify-center items-center gap-2 bg-white hover:bg-green-50 disabled:opacity-50 p-3 border-2 border-green-200 rounded-xl font-medium text-primary text-sm sm:text-base transition-all hover:-translate-y-0.5 duration-300 cursor-pointer"
-              onClick={handleLoginGoogle}
-            >
+          <div className="flex gap-[15px] mb-[20px]">
+            <button disabled={loadingGoogle} className="flex flex-1 justify-center items-center gap-2 bg-white hover:bg-light-green disabled:opacity-50 p-[12px] border-2 border-light-green rounded-[10px] font-medium text-primary transition-all hover:-translate-y-[2px] duration-300 ease-in-out cursor-pointer" onClick={handleLoginGoogle}>
+
+
               {loadingGoogle ? (
-                <MdAutorenew size={20} className="animate-spin" />
+                <MdAutorenew size={20} className="m-auto the-spinner" />
               ) : (
                 <>
-                  <span>Google</span>
-                  <FcGoogle size={20} />
-                </>
-              )}
+
+                  <span> Iniciar Sesión con
+                    Google</span>
+                  <FcGoogle size={22} />
+                </>)
+
+              }
             </button>
           </div>
         </div>
       </div>
+      <div className="w-full max-w-[500px]">
+        <div className="bg-gradient-primary-to-accent shadow-[0_5px_20px_rgba(104,224,127,0.2)] p-[25px] rounded-[15px]">
+          <div className="mb-[20px] font-semibold text-[18px] text-white text-5xl text-center">💱 Compra y Venta de Divisas</div>
 
-      {/* Exchange Calculator */}
-      <div className="w-full max-w-md lg:max-w-lg">
-        <div className="bg-gradient-to-r from-primary to-accent shadow-lg p-4 sm:p-6 md:p-8 rounded-2xl">
-          <div className="mb-4 sm:mb-6 font-semibold text-white text-xl sm:text-2xl text-center">💱 Compra y Venta de Divisas</div>
-
-          {/* Operation Toggle */}
-          <div className="flex bg-white mb-3 sm:mb-4 p-1 rounded-xl">
-            <button
-              className={`flex-1 py-2 px-2 sm:px-3 border-none bg-transparent rounded-lg font-medium cursor-pointer transition-all duration-300 text-primary text-xs sm:text-sm ${
-                operation === 'buyUsd' ? 'bg-secondary text-white' : ''
-              }`}
+          <div className="flex bg-white mb-[10px] p-[4px] rounded-[10px]">
+            <button className={`flex-1 p-[8px_6px] border-none bg-transparent rounded-[8px] font-['Roboto'] font-medium cursor-pointer transition-all duration-300 ease-in-out text-primary text-[12px] ${operation === 'buyUsd' ? 'bg-secondary text-white' : ''}`}
               onClick={() => setOperation('buyUsd')}
             >
               🟢 Comprar USD
             </button>
-            <button
-              className={`flex-1 py-2 px-2 sm:px-3 border-none bg-transparent rounded-lg font-medium cursor-pointer transition-all duration-300 text-primary text-xs sm:text-sm ${
-                operation === 'sellUsd' ? 'bg-secondary text-white' : ''
-              }`}
+            <button className={`flex-1 p-[8px_6px] border-none bg-transparent rounded-[8px] font-['Roboto'] font-medium cursor-pointer transition-all duration-300 ease-in-out text-primary text-[12px] ${operation === 'sellUsd' ? 'bg-secondary text-white' : ''}`}
               onClick={() => setOperation('sellUsd')}
             >
               🔴 Vender USD
             </button>
           </div>
 
-          {/* Currency Inputs */}
-          <div className="flex sm:flex-row flex-col items-center gap-3 sm:gap-4 my-4 sm:my-6">
-            <div className="relative w-full">
+          {/* Opciones MXN removidas intencionalmente para simplificar la UI */}
+
+          <div className="flex sm:flex-col items-center gap-[15px] sm:gap-[10px] my-[20px]">
+            <div className="relative flex-1">
               <input
                 type="number"
                 placeholder="1000"
                 value={inputAmount}
                 onChange={(e) => setInputAmount(Number(e.target.value))}
-                className="p-3 sm:p-4 pr-12 border-2 border-white focus:border-secondary rounded-xl focus:outline-none w-full font-semibold text-primary text-base sm:text-lg"
+                className="bg-white focus:shadow-[0_0_10px_rgba(104,224,127,0.3)] p-[15px_50px_15px_15px] border-2 border-white focus:border-secondary rounded-[10px] focus:outline-none w-full font-semibold text-[18px] text-primary"
               />
-              <div className="top-1/2 right-3 absolute bg-primary px-2 sm:px-3 py-1 rounded font-bold text-white text-xs -translate-y-1/2">
-                {inputCurrency}
-              </div>
+              <div className="top-1/2 right-[15px] absolute bg-primary p-[5px_10px] rounded-[5px] font-bold text-[12px] text-white -translate-y-1/2">{inputCurrency}</div>
             </div>
-            <div className="font-bold text-white text-2xl sm:rotate-90">→</div>
-            <div className="relative w-full">
+            <div className="font-bold text-[24px] text-primary sm:rotate-90">→</div>
+            <div className="relative flex-1">
               <input
                 type="number"
                 placeholder="0.00"
                 value={outputAmount.toFixed(2)}
                 readOnly
-                className="p-3 sm:p-4 pr-12 border-2 border-white focus:border-secondary rounded-xl focus:outline-none w-full font-semibold text-primary text-base sm:text-lg"
+                className="bg-white focus:shadow-[0_0_10px_rgba(104,224,127,0.3)] p-[15px_50px_15px_15px] border-2 border-white focus:border-secondary rounded-[10px] focus:outline-none w-full font-semibold text-[18px] text-primary"
               />
-              <div className="top-1/2 right-3 absolute bg-primary px-2 sm:px-3 py-1 rounded font-bold text-white text-xs -translate-y-1/2">
-                {outputCurrency}
-              </div>
+              <div className="top-1/2 right-[15px] absolute bg-primary p-[5px_10px] rounded-[5px] font-bold text-[12px] text-white -translate-y-1/2">{outputCurrency}</div>
             </div>
           </div>
 
-          {/* Rates Display */}
-          <div className="bg-white p-3 sm:p-4 rounded-xl">
-            <div className="mb-2 sm:mb-3 font-semibold text-primary text-sm sm:text-base text-center">
+          <div className="bg-white p-[15px] rounded-[10px]">
+            <div className="mb-[10px] font-semibold text-[14px] text-primary text-center">
               {operationText}
             </div>
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex justify-between items-center mb-[8px]">
               <div className="flex-1 text-center">
-                <div className="mb-1 text-gray-600 text-xs">Compramos USD</div>
-                <div className="font-semibold text-secondary text-sm sm:text-base">${rates.buy.toFixed(2)}</div>
+                <div className="mb-[2px] text-[10px] text-gray-custom">Compramos USD</div>
+                <div className="font-semibold text-[14px] text-secondary">${rates.buy.toFixed(2)}</div>
               </div>
               <div className="flex-1 text-center">
-                <div className="mb-1 text-gray-600 text-xs">Vendemos USD</div>
-                <div className="font-semibold text-primary text-sm sm:text-base">${rates.sell.toFixed(2)}</div>
+                <div className="mb-[2px] text-[10px] text-gray-custom">Vendemos USD</div>
+                <div className="font-semibold text-[14px] text-primary">${rates.sell.toFixed(2)}</div>
               </div>
             </div>
+            {/* Tasas MXN removidas para mostrar solo tasas USD */}
           </div>
         </div>
       </div>
@@ -290,4 +277,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Login; 
