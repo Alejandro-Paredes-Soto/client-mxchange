@@ -1,0 +1,40 @@
+.container {
+  padding: 20px;
+}
+.formCol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+}
+.rowLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.muted {
+  color: #666;
+}
+.mt8 {
+  margin-top: 8px;
+}
+.actions {
+  margin-top: 12px;
+}
+.ml12 {
+  margin-left: 12px;
+}
+.confirmSection {
+  padding: 20px;
+}
+.qrBox {
+  margin-top: 16px;
+}
+.qrImage {
+  width: 160px;
+  height: 160px;
+  background: #eee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

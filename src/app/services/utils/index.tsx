@@ -3,23 +3,33 @@
 import axios from "axios";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Cookies from 'js-cookie';
 
 
 const useUtils = () => {
   const router = useRouter();
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = typeof window !== 'undefined' ? Cookies.get('token') : null;
 
   
-     const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL,
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const api = axios.create({
+    baseURL,
     headers: {
-         Authorization: token ? `Bearer ${token}` : '',
+      Authorization: token ? `Bearer ${token}` : '',
     }
   })
 
    api.interceptors.response.use(
     (response) => response,
     (er) => {
+      if (er.response?.status === 401) {
+        // Token inválido o expirado, redirigir al login
+        alert('Sesión expirada. Redirigiendo al login.');
+        localStorage.clear();
+        Cookies.remove('token');
+        window.location.href = '/login';
+        return;
+      }
       alert(er.response?.data.message || er?.message);
       return;
     }
@@ -31,7 +41,7 @@ const useUtils = () => {
     try {
       const res = await api.post(endPoint, data, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${Cookies.get("token")}`,
         },
       });
       return res;
@@ -47,7 +57,7 @@ const useUtils = () => {
     try {
       const res = await api.get(endPoint, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${Cookies.get("token")}`,
         },
       });
 
@@ -85,6 +95,7 @@ const useUtils = () => {
   const onLogout = async () => {
      await signOut();
      localStorage.clear();
+     Cookies.remove('token', { path: '/' });
    window.location.href = "/login";
 
   }

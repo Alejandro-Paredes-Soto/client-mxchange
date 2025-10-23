@@ -1,34 +1,33 @@
 "use client";
 
-import styles from "./forgotpassword.module.css"
 import useForgotPassword from "./useForgotPassword";
 
 const ForgotPassword = () => {
 
     const {  emailR, loading, handleKeyup, handleClick, handleInputChange}  = useForgotPassword();
   
-    return (  <div className="w-full flex items-center justify-center p-4" style={{minHeight: "100vh"}}>
-      <div className="w-full max-w-md bg-white  overflow-hidden radius shadow">
+    return (  <div className="flex justify-center items-center p-4 w-full min-h-screen">
+      <div className="bg-white shadow w-full max-w-md overflow-hidden radius">
         <div className="p-8">
           <div className="space-y-1">
            
 
-            <div className={styles.container}>
-              <div className={styles.head}>
-                <span>Recuperar Contraseña</span>
+            <div className="bg-white w-full">
+              <div className="flex justify-center bg-primary px-8 py-2.5 rounded-t-lg w-full text-white">
+                <span className="font-semibold text-white text-xl text-start">Recuperar Contraseña</span>
               </div>
-              <div className={styles.card}>
+              <div className="flex flex-col justify-center items-center mx-auto pt-2.5 pb-2.5 rounded-lg w-full">
             
 
-                <div className={styles.containerbody}>
-                  <h3 className="font-bold text-[#028f61] text-[25px] mb-5">¿Olvidaste tu contraseña?</h3>
-                  <span style={{ textAlign: "center", display: "block" }}>
+                <div className="flex flex-col items-center p-2.5 w-11/12">
+                  <h3 className="mb-5 font-bold text-primary text-2xl">¿Olvidaste tu contraseña?</h3>
+                  <span className="block text-center">
                     Te enviaremos un correo con instrucciones para recuperarla
                   </span>
                   <br />
-                  <form className={styles.form}>
-                    <div className={styles.containerinput}>
-                      <div className={styles.containericonoemail}>
+                  <form className="flex flex-col items-center w-full">
+                    <div className="flex w-full">
+                      <div className="flex justify-center items-center px-1 py-1 border border-gray-300 rounded-l">
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           width="13"
@@ -41,7 +40,7 @@ const ForgotPassword = () => {
                         </svg>
                       </div>
                       <input
-                        className={styles.input}
+                        className="p-1 border border-gray-300 w-full"
                         type="email"
                         placeholder="Correo Electronico"
                         onKeyUp={handleKeyup}
@@ -50,12 +49,12 @@ const ForgotPassword = () => {
                       />
                     </div>
                     <button
-                      className={styles.button}
+                      className="bg-primary disabled:opacity-50 mt-5 border-none rounded-lg outline-none w-36 min-h-9 font-bold text-white cursor-pointer"
                       onClick={handleClick}
                       disabled={loading || !emailR}
                     >
                       {loading ? (
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
+                        <div className="mx-auto border-2 border-white border-t-transparent rounded-full w-5 h-5 animate-spin"></div>
                       ) : (
                         "Enviar correo"
                       )}

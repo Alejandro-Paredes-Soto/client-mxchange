@@ -1,0 +1,11 @@
+.container { padding: 20px; }
+.item { padding: 12px; border-bottom: 1px solid #eee; }
+.title { font-size: 16px; }
+.meta { font-size: 13px; color: #333; margin-top: 6px; }
+.meta span { margin-right: 12px; }
+.timestamp { font-size: 12px; color: #666; margin-top: 8px; }
+.loading { padding: 12px; }
+.empty { padding: 12px; }
+.qrBox { margin-top: 8px; }
+.qrNote { font-size: 13px; margin-bottom: 6px; }
+.qrImg { width: 120px; height: 120px; border: 1px solid #ddd; }

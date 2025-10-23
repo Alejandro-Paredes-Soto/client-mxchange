@@ -1,0 +1,4 @@
+.confirmSection { padding: 20px; }
+.qrBox { margin-top: 16px; display: flex; align-items: center; gap: 12px; }
+.qrImage { width: 140px; height: 140px; border: 1px solid #ddd; display: inline-block; }
+.qrNote { font-size: 13px; color: #444; }

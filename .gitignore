@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/backend/.gitignore
+/backend/node_modules
+/backend/.env*
+/backend/coverage
+/backend/npm-debug.log*
+/backend/yarn-debug.log*
+/backend/yarn-error.log*
+/backend/database
+/backend/scripts

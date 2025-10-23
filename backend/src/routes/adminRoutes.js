@@ -1,0 +1,30 @@
+const express = require('express');
+const router = express.Router();
+const adminController = require('../controllers/adminController');
+const { authenticate } = require('../middlewares/auth');
+const { isAdmin } = require('../middlewares/isAdmin');
+
+router.get('/inventory', authenticate, isAdmin, adminController.getInventory);
+router.put('/inventory', authenticate, isAdmin, adminController.updateInventory);
+router.get('/inventory/history/:branchId', authenticate, isAdmin, adminController.getInventoryHistory);
+router.get('/transactions', authenticate, isAdmin, adminController.listAllTransactions);
+router.put('/transactions/:id/status', authenticate, isAdmin, adminController.changeTransactionStatus);
+router.get('/transactions/:id', authenticate, isAdmin, adminController.getTransactionDetails);
+router.get('/dashboard/kpis', authenticate, isAdmin, adminController.getDashboardKPIs);
+router.get('/dashboard/chart', authenticate, isAdmin, adminController.getDashboardChartData);
+router.get('/dashboard/inventory-summary', authenticate, isAdmin, adminController.getInventorySummary);
+router.get('/dashboard/recent-transactions', authenticate, isAdmin, adminController.getRecentTransactions);
+router.get('/users', authenticate, isAdmin, adminController.listUsers);
+router.get('/users/:id', authenticate, isAdmin, adminController.getUserProfile);
+router.put('/users/:id/status', authenticate, isAdmin, adminController.toggleUserStatus);
+router.get('/config/rates', authenticate, isAdmin, adminController.getCurrentRates);
+router.put('/config/rates', authenticate, isAdmin, adminController.updateRates);
+router.get('/config/branches', authenticate, isAdmin, adminController.listBranches);
+router.post('/config/branches', authenticate, isAdmin, adminController.createBranch);
+router.put('/config/branches/:id', authenticate, isAdmin, adminController.updateBranch);
+router.delete('/config/branches/:id', authenticate, isAdmin, adminController.deleteBranch);
+router.get('/config/alerts', authenticate, isAdmin, adminController.getAlertSettings);
+router.put('/config/alerts', authenticate, isAdmin, adminController.updateAlertSettings);
+router.put('/config/commission', authenticate, isAdmin, adminController.updateCommissionSetting);
+
+module.exports = router;

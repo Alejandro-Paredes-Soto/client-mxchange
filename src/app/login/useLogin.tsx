@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import useUtils from "../services/utils";
 import { signIn } from "next-auth/react";
+import Cookies from 'js-cookie';
 
 type OperationType = "buyUsd" | "sellUsd" | "buyMxn" | "sellMxn";
 
@@ -135,12 +136,20 @@ const useLogin = () => {
      try {
          
         setLoadingLogin(true);
-        const response = await requestPost(login, "/user/login");
-        if (response.status == 200) {
-            console.log(response);
-            setLoadingLogin(false);
-            window.location.href = "/inicio";
-        }
+    const response = await requestPost(login, "/auth/login");
+    if (response?.status === 200) {
+      // save token if present
+      const token = response.data?.token;
+      if (token) Cookies.set('token', token, { path: '/' });
+      const user = response.data?.user;
+      if (user?.role === 'admin') {
+        window.location.href = "/admin";
+      } else {
+        window.location.href = "/inicio";
+      }
+      console.log('login ok', response.data);
+      setLoadingLogin(false);
+    }
 
      } catch (error) {
         setLoadingLogin(false);
@@ -152,17 +161,43 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
      event.preventDefault();
 
      try {
-         
        setLoadingRegister(true);
-        const response = await requestPost(dataRegister, "/user/register");
-        console.log(response);
-        if (response.status == 200){
-            setLoadingRegister(false);
-           alert("registrado")
-        }
+       const response = await requestPost(dataRegister, "/auth/register");
+       console.log(response);
+
+       if (response?.status === 201 || response?.status === 200){
+         // If backend returned a token on registration, use it and redirect
+         const tokenFromRegister = response.data?.token;
+         if (tokenFromRegister) {
+           Cookies.set('token', tokenFromRegister);
+           setLoadingRegister(false);
+           window.location.href = "/inicio";
+           return;
+         }
+
+         // Otherwise, try to login automatically using the provided credentials
+         try {
+           const loginResp = await requestPost({ email: dataRegister.email, password: dataRegister.password }, "/auth/login");
+           if (loginResp?.status === 200) {
+             const token = loginResp.data?.token;
+             if (token) Cookies.set('token', token);
+             setLoadingRegister(false);
+             window.location.href = "/inicio";
+             return;
+           }
+         } catch (loginError) {
+           // If auto-login fails, keep the user on the page and show a message
+           alert("Registro exitoso pero no se pudo iniciar sesión automáticamente. Por favor inicia sesión.");
+           console.error(loginError);
+         }
+
+         setLoadingRegister(false);
+       }
 
      } catch (error) {
         setLoadingRegister(false);
+        console.error(error);
+        alert('Error al registrar. Inténtalo de nuevo.');
         return;
      }
   }
@@ -175,7 +210,7 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
     await signIn("google");
     setLoadingGoogle(true);
 
-    localStorage.setItem("authGoogle", "true");
+    Cookies.set("authGoogle", "true");
   }
 
    return {
