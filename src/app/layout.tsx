@@ -2,7 +2,7 @@
 
 import { SessionProvider } from "next-auth/react";
 import "./globals.css";
-import { SocketProvider } from '@/providers/SocketProvider';
+import { Toaster } from "@/components/ui/sonner";
 
 export default function RootLayout({
   children,
@@ -10,11 +10,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="es">
       <body>
         <SessionProvider>
-          <SocketProvider>{children}</SocketProvider>
+          {children}
         </SessionProvider>
+        <Toaster 
+          position="top-center"
+          toastOptions={{ duration: 4000 }}
+          expand={true}
+          closeButton
+          theme="dark"
+        />
       </body>
     </html>
   );

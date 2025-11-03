@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { getRates, getAdminInventory, AdminInventoryItem, getDashboardKPIs, getDashboardChartData, getRecentTransactions, AdminTransaction } from '../../services/api';
 import Cookies from 'js-cookie';
 
@@ -36,6 +37,13 @@ const AdminDashboard = () => {
   return (
     <section className="p-5">
       <h1 className="mb-4 font-bold text-primary text-2xl">Dashboard Admin</h1>
+
+      <div className="mb-6">
+        <h3 className="mb-2 font-semibold text-primary text-xl">Accesos Rápidos</h3>
+        <div className="flex gap-2">
+          <Link href="/admin/transactions/lookup" className="bg-primary px-4 py-2 rounded text-white">Buscar transacción</Link>
+        </div>
+      </div>
 
       <div className="mb-6">
         <h3 className="mb-2 font-semibold text-primary text-xl">KPIs (Hoy)</h3>

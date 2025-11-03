@@ -1,9 +1,9 @@
 "use client";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import useUtils from "../services/utils";
-import { getRatesMock, listTransactionsMock, getUserTransactions, Transaction, Rates } from "../services/api";
-import { humanizeStatus, getStatusColor } from '../../lib/statuses';
+import useUtils from "../../services/utils";
+import { getRatesMock, listTransactionsMock, getUserTransactions, Transaction, Rates } from "../../services/api";
+import { humanizeStatus, getStatusColor } from '@/lib/statuses';
 
 import Cookies from 'js-cookie';
 import RateCard from "@/components/RateCard";
@@ -146,11 +146,7 @@ const Inicio = () => {
     <section className="mx-auto p-5 max-w-7xl">
       <header className="flex sm:flex-row flex-col justify-between items-start sm:items-center gap-4">
         <h1 className="font-bold text-primary text-2xl">Bienvenido{displayName ? `, ${displayName}` : ''}</h1>
-        <div className="flex sm:flex-row flex-col gap-2 w-full sm:w-auto">
-          <button className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent px-4 py-2 rounded-lg w-full sm:w-auto font-medium text-white transition-all hover:-translate-y-1" onClick={() => onRouterLink('/operacion?mode=buy')}>Comprar Dólares</button>
-          <button className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent px-4 py-2 rounded-lg w-full sm:w-auto font-medium text-white transition-all hover:-translate-y-1" onClick={() => onRouterLink('/operacion?mode=sell')}>Vender Dólares</button>
-          <button className="bg-white hover:bg-light-green px-4 py-2 border border-light-green rounded-lg w-full sm:w-auto font-medium text-primary transition-all hover:-translate-y-1" onClick={onLogout}>Cerrar sesión</button>
-        </div>
+       
       </header>
 
       <main className="gap-5 grid grid-cols-1 md:grid-cols-[1fr_320px] mt-5">

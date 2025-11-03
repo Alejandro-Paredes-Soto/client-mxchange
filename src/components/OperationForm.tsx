@@ -6,6 +6,7 @@ import { listBranches, Rates, createTransactionApi } from "@/app/services/api";
 import { debounce } from 'lodash';
 import { useSocket } from '@/providers/SocketProvider';
 import { toast } from 'sonner';
+import { NumberInput } from "./ui/number-input";
 
 type OperationType = 'buy' | 'sell'; // Represents the user's goal: buying or selling USD.
 
@@ -335,6 +336,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
           // Intentar leer inventario actualizado desde la respuesta del backend si viene en res.inventory
           const invFromRes = (res.inventory && typeof res.inventory === 'object') ? res.inventory as Record<string, unknown> : undefined;
           if (socket && socket.emit) {
+            console.log('Emitiendo inventory.updated por socket para branch:', branchIdNum, 'invFromRes?', !!invFromRes);
             if (invFromRes) {
               socket.emit('inventory.updated', { branch_id: branchIdNum, inventory: invFromRes, transaction: res.transaction });
             } else {
@@ -346,8 +348,9 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
           console.warn('No se pudo emitir evento de socket inventory.updated', e);
         }
       } else {
-        // This case handles unexpected successful responses without a transaction code
-        throw new Error("La respuesta del servidor no fue la esperada.");
+        // Si el backend respondió 200 pero sin transaction_code, mostrar mensaje claro
+        setError('No se pudo crear la transacción. Intenta nuevamente.');
+        return;
       }
     } catch (err: unknown) {
       console.error('Error creating transaction:', err);
@@ -410,11 +413,11 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
               ¿Cuánto Dólar(s) Quieres Recibir?
             </label>
             <div className="relative">
-              <input
-                type="number"
+              <NumberInput
                 value={toAmount}
                 onChange={handleToChange}
                 placeholder="0.00"
+                decimals={2}
                 className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg"
                 disabled={isLoading}
               />
@@ -427,11 +430,11 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
               ¿Cuánto Dólar(s) Quieres Vender?
             </label>
             <div className="relative">
-              <input
-                type="number"
+              <NumberInput
                 value={fromAmount}
                 onChange={handleFromChange}
                 placeholder="0.00"
+                decimals={2}
                 className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg"
                 disabled={isLoading}
               />
@@ -534,7 +537,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
               <label htmlFor="method" className="block mb-2 font-medium text-primary">Método de Pago:</label>
               <select id="method" value={method} onChange={(e) => setMethod(e.target.value)} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg" disabled={isLoading}>
                 <option>En sucursal</option>
-                <option>Transferencia bancaria</option>
+                <option>Transferencia bancaria / Tarjeta de cto/dto</option>
               </select>
             </div>
           )}

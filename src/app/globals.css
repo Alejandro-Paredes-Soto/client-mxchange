@@ -4,6 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Para Firefox */
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
 :root {
   /* Verde principal más oscuro para mejor contraste en fondo blanco */
   --primary-green: #006644;
@@ -210,13 +221,14 @@ html {
 
 /* Safe rule to reserve space for the desktop sidebar */
 @media (min-width: 768px) {
-  .sidebar-wrapper[data-side="left"] ~ main,
+
+  .sidebar-wrapper[data-side="left"]~main,
   .sidebar-wrapper[data-side="left"] main,
   .sidebar-wrapper main {
     padding-left: var(--sidebar-width);
   }
 
-  .sidebar-wrapper[data-side="right"] ~ main,
+  .sidebar-wrapper[data-side="right"]~main,
   .sidebar-wrapper[data-side="right"] main {
     padding-right: var(--sidebar-width);
   }

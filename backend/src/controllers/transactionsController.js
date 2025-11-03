@@ -216,6 +216,86 @@ const createTransaction = async (req, res, next) => {
       if (global && global.io && typeof global.io.emit === 'function') {
         try {
           global.io.emit('inventory.updated', socketPayload);
+          
+          // Notificación para admins: nueva operación reservada
+          const tx = rowsTx[0];
+          try {
+            await pool.query(
+              'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+              ['admin', null, null, 'Nueva operación reservada', `Código ${tx.transaction_code} en sucursal ${tx.branch_name}`, 'transaction_reserved', tx.id]
+            );
+          } catch (insErr) {
+            console.warn('No se pudo guardar notificación admin:', insErr && insErr.message ? insErr.message : insErr);
+          }
+          
+          // Emitir a sala de admins
+          try {
+            global.io.to('admins').emit('notification', {
+              title: 'Nueva operación reservada',
+              message: `Código ${tx.transaction_code} en sucursal ${tx.branch_name}`,
+              event_type: 'transaction_reserved',
+              transaction_id: tx.id,
+              branch_id: branch_id,
+              created_at: new Date().toISOString()
+            });
+          } catch (emitNoteErr) {
+            console.warn('No se pudo emitir notificación a admins:', emitNoteErr && emitNoteErr.message ? emitNoteErr.message : emitNoteErr);
+          }
+
+          // Notificación para usuarios de sucursal: nueva operación en su sucursal
+          try {
+            await pool.query(
+              'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+              ['sucursal', null, branch_id, 'Nueva operación en tu sucursal', `Operación ${tx.transaction_code}: ${tx.type === 'buy' ? 'Compra' : 'Venta'} de ${tx.amount_to} ${tx.currency_to}`, 'transaction_reserved', tx.id]
+            );
+          } catch (insSucErr) {
+            console.warn('No se pudo guardar notificación sucursal:', insSucErr && insSucErr.message ? insSucErr.message : insSucErr);
+          }
+          
+          // Emitir a sala de la sucursal
+          try {
+            global.io.to(`branch:${branch_id}`).emit('notification', {
+              title: 'Nueva operación en tu sucursal',
+              message: `Operación ${tx.transaction_code}: ${tx.type === 'buy' ? 'Compra' : 'Venta'} de ${tx.amount_to} ${tx.currency_to}`,
+              event_type: 'transaction_reserved',
+              transaction_id: tx.id,
+              branch_id: branch_id,
+              created_at: new Date().toISOString()
+            });
+          } catch (emitBranchErr) {
+            console.warn('No se pudo emitir notificación a sucursal:', emitBranchErr && emitBranchErr.message ? emitBranchErr.message : emitBranchErr);
+          }
+
+          // Notificación para el usuario: reserva creada
+          const operationType = tx.type === 'buy' ? 'COMPRA' : 'VENTA';
+          const amount = tx.type === 'buy' ? tx.amount_to : tx.amount_from;
+          const currency = tx.type === 'buy' ? tx.currency_to : tx.currency_from;
+          const branchName = tx.branch_name || `Sucursal ${branch_id}`;
+          
+          const userNotifTitle = `Operación de ${operationType} reservada`;
+          const userNotifMessage = `Tu operación de ${operationType} de $${Number(amount).toFixed(2)} ${currency} con código ${tx.transaction_code} fue creada correctamente en ${branchName}.`;
+          
+          try {
+            await pool.query(
+              'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+              ['user', userId, null, userNotifTitle, userNotifMessage, 'transaction_created', tx.id]
+            );
+          } catch (insUserErr) {
+            console.warn('No se pudo guardar notificación de usuario:', insUserErr && insUserErr.message ? insUserErr.message : insUserErr);
+          }
+          
+          try {
+            global.io.to(`user:${userId}`).emit('notification', {
+              title: userNotifTitle,
+              message: userNotifMessage,
+              event_type: 'transaction_created',
+              transaction_id: tx.id,
+              created_at: new Date().toISOString()
+            });
+          } catch (emitUserErr) {
+            console.warn('No se pudo emitir notificación a usuario:', emitUserErr && emitUserErr.message ? emitUserErr.message : emitUserErr);
+          }
+          
           console.log('Emitted inventory.updated via sockets for branch', branch_id);
         } catch (emitErr) {
           console.warn('No se pudo emitir evento socket inventory.updated:', emitErr && emitErr.message ? emitErr.message : emitErr);

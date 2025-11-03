@@ -5,6 +5,7 @@ import { getAdminInventory, putAdminInventory, AdminInventoryItem as ApiAdminInv
 import { useSocket } from '@/providers/SocketProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -325,11 +326,11 @@ const AdminInventoryPage = () => {
             </div>
             <div>
               <Label>Ajuste (positivo para agregar, negativo para restar)</Label>
-              <Input
-                type="number"
+              <NumberInput
                 value={editingItem?.adjustment || ''}
                 onChange={(e) => setEditingItem(prev => prev ? { ...prev, adjustment: e.target.value } : null)}
                 placeholder="Ej: 5000 o -3000"
+                allowNegative={true}
               />
             </div>
             <div>
@@ -363,8 +364,7 @@ const AdminInventoryPage = () => {
           <div className="space-y-4 py-4">
             <div>
               <Label>Umbral USD</Label>
-              <Input
-                type="number"
+              <NumberInput
                 value={usdThreshold}
                 onChange={(e) => setUsdThreshold(Number(e.target.value))}
                 placeholder="Ej: 10000"
@@ -372,8 +372,7 @@ const AdminInventoryPage = () => {
             </div>
             <div>
               <Label>Umbral MXN</Label>
-              <Input
-                type="number"
+              <NumberInput
                 value={mxnThreshold}
                 onChange={(e) => setMxnThreshold(Number(e.target.value))}
                 placeholder="Ej: 100000"

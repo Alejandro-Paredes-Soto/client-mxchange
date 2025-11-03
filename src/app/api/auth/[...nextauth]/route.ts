@@ -46,7 +46,7 @@ const handler = NextAuth({
         if (status == 200) {
           const isValidToken = verify(
             data.data.token,
-            process.env.NEXT_PUBLIC_KEY_JWT || ""
+            process.env.JWT_SECRET || ""
           );
 
           (user as any).idUser = Number(data.data.idUser.toString());

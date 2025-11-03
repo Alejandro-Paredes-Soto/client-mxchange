@@ -1,14 +1,14 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
-import { listTransactionsMock, getUserTransactions, Transaction, BackendTransaction } from '../services/api';
-import { humanizeStatus, getStatusColor } from '../../lib/statuses';
+import { listTransactionsMock, getUserTransactions, Transaction, BackendTransaction } from '../../services/api';
+import { humanizeStatus, getStatusColor } from '@/lib/statuses';
 import Image from 'next/image';
 import Cookies from 'js-cookie';
 import Link from 'next/link';
 // shadcn components: si no están, se usan elementos nativos con clases similares
-import { Input } from '../../components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Label } from '../../components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 
 const humanizeType = (t: 'buy' | 'sell') => (t === 'buy' ? 'Compra de Dólares' : 'Venta de Dólares');

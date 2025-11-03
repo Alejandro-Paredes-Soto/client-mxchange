@@ -4,13 +4,16 @@ const pool = require('../config/db');
 
 router.get('/exchange-rate', async (req, res) => {
   try {
-    // Intentamos leer la última tasa desde exchange_rate_history
-    const [rows] = await pool.query('SELECT rate_buy, rate_sell, fetched_at FROM exchange_rate_history ORDER BY fetched_at DESC LIMIT 1');
-    if (rows && rows[0]) return res.json({ buy: Number(rows[0].rate_buy), sell: Number(rows[0].rate_sell), fetched_at: rows[0].fetched_at });
-
-    // Fallback simple
-    return res.json({ buy: 17.8, sell: 18.2, fetched_at: new Date() });
+    // Leer las tasas desde la tabla settings
+    const [buyRows] = await pool.query('SELECT value FROM settings WHERE key_name = ?', ['rate_buy']);
+    const [sellRows] = await pool.query('SELECT value FROM settings WHERE key_name = ?', ['rate_sell']);
+    
+    const buy = buyRows && buyRows[0] ? Number(buyRows[0].value) : 17.8;
+    const sell = sellRows && sellRows[0] ? Number(sellRows[0].value) : 18.2;
+    
+    return res.json({ buy, sell, fetched_at: new Date() });
   } catch (err) {
+    console.error('Error fetching exchange rates:', err);
     return res.status(500).json({ message: 'error' });
   }
 });

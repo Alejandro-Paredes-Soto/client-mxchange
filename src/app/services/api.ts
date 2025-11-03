@@ -5,32 +5,34 @@ export type Rates = {
     lastUpdated: number;
 };
 
-// Mock helper to fetch external rates or fallback
+// Mock helper to fetch rates from backend or fallback
 export async function getRatesMock(): Promise<Rates> {
     try {
-        const apiKey = process.env.NEXT_PUBLIC_EXCHANGE_API_KEY;
-        let res: Response;
-        if (apiKey) {
-            res = await fetch('https://v6.exchangerate-api.com/v6/' + apiKey + '/latest/USD');
-        } else {
-            res = await fetch('https://api.exchangerate.host/latest?base=USD&symbols=MXN');
+        // Intentar obtener las tasas desde el backend
+        const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+        if (API_BASE) {
+            const res = await fetch(`${API_BASE}/public/exchange-rate`);
+            if (res.ok) {
+                const data = await res.json();
+                return { 
+                    usd: { buy: Number(data.buy), sell: Number(data.sell) }, 
+                    lastUpdated: new Date(data.fetched_at).getTime() 
+                };
+            }
         }
-        if (!res.ok) throw new Error(`status ${res.status}`);
-        const data = await res.json();
-        let mid: number | undefined;
-        if (data?.conversion_rates && typeof data.conversion_rates.MXN === 'number') mid = data.conversion_rates.MXN;
-        else if (data?.rates && typeof data.rates.MXN === 'number') mid = data.rates.MXN;
-        if (!mid) throw new Error('invalid response');
-        const spread = 0.005;
-        const buy = +(mid * (1 - spread)).toFixed(4);
-        const sell = +(mid * (1 + spread)).toFixed(4);
-        return { usd: { buy, sell }, lastUpdated: Date.now() };
+        
+        // Fallback si no hay backend configurado
+        console.log('getRatesMock: using fallback rates');
+        return { 
+            usd: { buy: 17.8, sell: 18.2 }, 
+            lastUpdated: Date.now() 
+        };
     } catch (e) {
-        console.error('getRatesMock: error fetching real rates, using fallback mock', e);
-        const baseBuy = 17.8;
-        const baseSell = 18.2;
-        const jitter = () => (Math.random() - 0.5) * 0.04;
-        return { usd: { buy: +(baseBuy + jitter()).toFixed(4), sell: +(baseSell + jitter()).toFixed(4) }, lastUpdated: Date.now() };
+        console.error('getRatesMock: error fetching rates, using fallback', e);
+        return { 
+            usd: { buy: 17.8, sell: 18.2 }, 
+            lastUpdated: Date.now() 
+        };
     }
 }
 
@@ -102,7 +104,10 @@ export async function createTransactionApi(payload: Record<string, unknown>, tok
         body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (!res.ok) return { error: data };
+    if (!res.ok) {
+        // Rechazar con forma similar a Axios para que el catch en componentes pueda leer status y message
+        throw { response: { status: res.status, data } } as { response: { status: number; data: unknown } };
+    }
     return data;
 }
 
@@ -225,7 +230,7 @@ export type AdminUser = {
     name: string;
     email: string;
     role: string;
-    active: boolean;
+    active: boolean | number; // MySQL devuelve 0/1, TypeScript espera boolean
     createdAt: string;
 };
 
@@ -295,6 +300,7 @@ export type Branch = {
     address: string;
     city: string;
     state: string;
+    user_email?: string;
 };
 
 export async function listBranchesAdmin(token?: string): Promise<Branch[]> {
@@ -310,7 +316,7 @@ export async function listBranchesAdmin(token?: string): Promise<Branch[]> {
     }
 }
 
-export async function createBranch(payload: { name: string; address: string; city?: string; state?: string }, token?: string) {
+export async function createBranch(payload: { name: string; address: string; email: string; password: string; city?: string; state?: string }, token?: string) {
     if (!API_BASE) return { error: 'no-api' };
     try {
         const res = await fetch(`${API_BASE}/admin/config/branches`, {
@@ -327,7 +333,7 @@ export async function createBranch(payload: { name: string; address: string; cit
     }
 }
 
-export async function updateBranch(id: number, payload: Partial<Branch>, token?: string) {
+export async function updateBranch(id: number, payload: Partial<Branch> & { email?: string; password?: string }, token?: string) {
     if (!API_BASE) return { error: 'no-api' };
     try {
         const res = await fetch(`${API_BASE}/admin/config/branches/${id}`, {

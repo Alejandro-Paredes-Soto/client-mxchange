@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import useUtils from "../services/utils";
+import useUtils from "../../services/utils";
 import { signIn } from "next-auth/react";
 import Cookies from 'js-cookie';
 
@@ -142,7 +142,8 @@ const useLogin = () => {
       const token = response.data?.token;
       if (token) Cookies.set('token', token, { path: '/' });
       const user = response.data?.user;
-      if (user?.role === 'admin') {
+      // Redirigir a admin si es admin o sucursal
+      if (user?.role === 'admin' || user?.role === 'sucursal') {
         window.location.href = "/admin";
       } else {
         window.location.href = "/inicio";

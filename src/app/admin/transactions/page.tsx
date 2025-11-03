@@ -31,27 +31,27 @@ const AdminTransactionsPage = () => {
     const token = Cookies.get('token');
     if (!token) return;
     setLoading(true);
-  const txs = await getAdminTransactions(filters, token);
-  // calcular KPIs a partir de estados crudos
-  const total = txs.length;
-  // Contar transacciones reservadas (nuevo estado). Mantener compatibilidad con registros antiguos que puedan tener 'pending'.
-  const reservedCount = txs.filter(t => {
-    const s = (t.status || '').toString().toLowerCase();
-    return s === 'reserved' || s === 'pending' || s.includes('reserv');
-  }).length;
-  const completed = txs.filter(t => (t.status || '').toString().toLowerCase() === 'completed').length;
-  const cancelled = txs.filter(t => (t.status || '').toString().toLowerCase() === 'cancelled').length;
-  // Contar transacciones pagadas / liquidadas
-  const paid = txs.filter(t => {
-    const s = (t.status || '').toString().toLowerCase();
-    return s === 'paid' || s === 'paid_success' || s === 'settled' || s.includes('paid');
-  }).length;
-  setKpis({ total, reserved: reservedCount, completed, cancelled, paid });
+    const txs = await getAdminTransactions(filters, token);
+    // calcular KPIs a partir de estados crudos
+    const total = txs.length;
+    // Contar transacciones reservadas (nuevo estado). Mantener compatibilidad con registros antiguos que puedan tener 'pending'.
+    const reservedCount = txs.filter(t => {
+      const s = (t.status || '').toString().toLowerCase();
+      return s === 'reserved' || s === 'pending' || s.includes('reserv');
+    }).length;
+    const completed = txs.filter(t => (t.status || '').toString().toLowerCase() === 'completed').length;
+    const cancelled = txs.filter(t => (t.status || '').toString().toLowerCase() === 'cancelled').length;
+    // Contar transacciones pagadas / liquidadas
+    const paid = txs.filter(t => {
+      const s = (t.status || '').toString().toLowerCase();
+      return s === 'paid' || s === 'paid_success' || s === 'settled' || s.includes('paid');
+    }).length;
+    setKpis({ total, reserved: reservedCount, completed, cancelled, paid });
 
-  // Humanizar estatus para mostrar en UI
-  const humanized = txs.map(t => ({ ...t, raw_status: t.status, status: humanizeStatus(t.status, 'generic') }));
-  setItems(humanized as AdminTransaction[]);
-  setLoading(false);
+    // Humanizar estatus para mostrar en UI
+    const humanized = txs.map(t => ({ ...t, raw_status: t.status, status: humanizeStatus(t.status, 'generic') }));
+    setItems(humanized as AdminTransaction[]);
+    setLoading(false);
   }, [filters]);
 
   useEffect(() => {
@@ -88,7 +88,7 @@ const AdminTransactionsPage = () => {
     <section className="p-5">
       <h1 className="mb-4 font-bold text-primary text-2xl">Transacciones</h1>
 
-  <div className="flex gap-4 mb-4">
+      <div className="flex gap-4 mb-4">
         <Input type="text" placeholder="Buscar por código" value={filters.code} onChange={(e) => setFilters({ ...filters, code: e.target.value })} />
         <Select value={filters.status || "all"} onValueChange={(value) => setFilters({ ...filters, status: value === "all" ? "" : value })}>
           <SelectTrigger className="w-[180px]">
@@ -157,7 +157,7 @@ const AdminTransactionsPage = () => {
         <Button onClick={loadTransactions}>Buscar</Button>
       </div>
 
-  <div className="gap-4 grid grid-cols-5 mb-4">
+      <div className="gap-4 grid grid-cols-5 mb-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-primary">Total Transacciones</CardTitle>
@@ -268,41 +268,50 @@ const AdminTransactionsPage = () => {
       </Dialog>
 
       <Dialog open={detailsDialog.open} onOpenChange={(open) => setDetailsDialog({ ...detailsDialog, open })}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="w-full min-w-[800px] !max-w-[90vw]">
           <DialogHeader>
             <DialogTitle>Detalles de Transacción</DialogTitle>
           </DialogHeader>
           {detailsDialog.details?.transaction && (
             <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Información General</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="font-medium text-muted-foreground text-sm">ID</span>
-                    <span className="font-semibold">{detailsDialog.details.transaction.id}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="font-medium text-muted-foreground text-sm">Código de Transacción</span>
-                    <span className="font-mono font-semibold">{detailsDialog.details.transaction.transaction_code}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="font-medium text-muted-foreground text-sm">Estado</span>
-                    <Badge className={getStatusColor(getStatusText(detailsDialog.details.transaction.status || ''))}>{getStatusText(detailsDialog.details.transaction.status || '')}</Badge>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b">
-                    <span className="font-medium text-muted-foreground text-sm">Tipo de Operación</span>
-                    <Badge variant="outline">{humanizeType(detailsDialog.details.transaction.type)}</Badge>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="font-medium text-muted-foreground text-sm">Fecha de Creación</span>
-                    <span className="font-semibold">{detailsDialog.details.transaction.created_at ? new Date(detailsDialog.details.transaction.created_at).toLocaleString() : 'N/A'}</span>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Primera fila - 3 columnas */}
+              <div className="gap-4 grid grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Información Básica</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between items-center py-2 border-b">
+                      <span className="font-medium text-muted-foreground text-sm">ID</span>
+                      <span className="font-semibold">{detailsDialog.details.transaction.id}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b">
+                      <span className="font-medium text-muted-foreground text-sm">Código</span>
+                      <span className="font-mono font-semibold text-sm">{detailsDialog.details.transaction.transaction_code}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2">
+                      <span className="font-medium text-muted-foreground text-sm">Tipo</span>
+                      <Badge variant="outline">{humanizeType(detailsDialog.details.transaction.type)}</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
 
-              <div className="gap-4 grid grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Estado y Fecha</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between items-center py-2 border-b">
+                      <span className="font-medium text-muted-foreground text-sm">Estado</span>
+                      <Badge className={getStatusColor(getStatusText(detailsDialog.details.transaction.status || ''))}>{getStatusText(detailsDialog.details.transaction.status || '')}</Badge>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-muted-foreground text-sm">Fecha de Creación</span>
+                      <span className="font-semibold text-sm">{detailsDialog.details.transaction.created_at ? new Date(detailsDialog.details.transaction.created_at).toLocaleString() : 'N/A'}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Cliente y Sucursal</CardTitle>
@@ -318,43 +327,46 @@ const AdminTransactionsPage = () => {
                     </div>
                   </CardContent>
                 </Card>
+              </div>
+
+              {/* Segunda fila - 2 columnas para montos y método/tasa */}
+              <div className="gap-4 grid grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Montos de la Transacción</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="gap-4 grid grid-cols-2">
+                      <div className="flex flex-col gap-2 p-4 border rounded-lg">
+                        <span className="font-medium text-muted-foreground text-sm">Monto Entregado</span>
+                        <span className="font-bold text-2xl">{parseFloat(detailsDialog.details.transaction.amount_from).toFixed(2)}</span>
+                        <span className="font-medium text-muted-foreground text-sm">{detailsDialog.details.transaction.currency_from}</span>
+                      </div>
+                      <div className="flex flex-col gap-2 p-4 border rounded-lg">
+                        <span className="font-medium text-muted-foreground text-sm">Monto Recibido</span>
+                        <span className="font-bold text-2xl">{parseFloat(detailsDialog.details.transaction.amount_to).toFixed(2)}</span>
+                        <span className="font-medium text-muted-foreground text-sm">{detailsDialog.details.transaction.currency_to}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Método y Tasa</CardTitle>
+                    <CardTitle className="text-lg">Método y Tasa de Cambio</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex flex-col gap-1">
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-col gap-2 p-4 border rounded-lg">
                       <span className="font-medium text-muted-foreground text-sm">Método de Pago</span>
-                      <span className="font-semibold">{detailsDialog.details.transaction.method}</span>
+                      <span className="font-semibold text-lg">{detailsDialog.details.transaction.method}</span>
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-2 p-4 border rounded-lg">
                       <span className="font-medium text-muted-foreground text-sm">Tasa de Cambio</span>
-                      <span className="font-mono font-semibold">{parseFloat(detailsDialog.details.transaction.exchange_rate).toFixed(4)}</span>
+                      <span className="font-mono font-bold text-lg">{parseFloat(detailsDialog.details.transaction.exchange_rate).toFixed(4)}</span>
                     </div>
                   </CardContent>
                 </Card>
               </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Montos de la Transacción</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="gap-4 grid grid-cols-2">
-                    <div className="flex flex-col gap-2 p-4 border rounded-lg">
-                      <span className="font-medium text-muted-foreground text-sm">Monto Entregado</span>
-                      <span className="font-bold text-2xl">{parseFloat(detailsDialog.details.transaction.amount_from).toFixed(2)}</span>
-                      <span className="font-medium text-muted-foreground text-sm">{detailsDialog.details.transaction.currency_from}</span>
-                    </div>
-                    <div className="flex flex-col gap-2 p-4 border rounded-lg">
-                      <span className="font-medium text-muted-foreground text-sm">Monto Recibido</span>
-                      <span className="font-bold text-2xl">{parseFloat(detailsDialog.details.transaction.amount_to).toFixed(2)}</span>
-                      <span className="font-medium text-muted-foreground text-sm">{detailsDialog.details.transaction.currency_to}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
             </div>
           )}
         </DialogContent>
