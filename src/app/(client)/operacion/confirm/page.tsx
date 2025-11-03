@@ -1,13 +1,17 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
-import { listTransactionsMock, Transaction, getUserTransactions, BackendTransaction } from '../../services/api';
-import { humanizeStatus, getStatusColor } from '../../../lib/statuses';
-import { useSearchParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
-import Link from 'next/link';
+import { listTransactionsMock, Transaction, getUserTransactions, BackendTransaction } from '../../../services/api';
+import { humanizeStatus, getStatusColor } from '@/lib/statuses';
+
 import Cookies from 'js-cookie';
 import { CreditCard, Banknote } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
+
+import Link from 'next/link';
+import Image from 'next/image';
+import { getSocket } from '@/lib/socket';
+import { toast } from 'sonner';
 // types for TSX loosened (file is .tsx but project may not strictly type everything)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
@@ -164,6 +168,55 @@ const ConfirmPage = () => {
       }
     })();
   }, [txId]);
+
+  // Escuchar cambios de estado en tiempo real vía WebSocket
+  useEffect(() => {
+    if (!tx || !txId) return;
+
+    const socket = getSocket();
+
+    const handleTransactionUpdate = (payload: any) => {
+      console.log('transaction.updated recibido en ConfirmPage:', payload);
+      
+      // Verificar si es la transacción actual
+      const payloadTxCode = payload.transaction_code || payload.code || payload.id;
+      
+      if (payloadTxCode && String(payloadTxCode) === String(txId)) {
+        const newStatus = humanizeStatus(payload.status, tx.type === 'buy' ? 'buy_card' : 'sell_cash');
+        
+        toast.success('Estado actualizado', {
+          description: `Tu transacción cambió a: ${newStatus}`,
+        });
+        
+        // Actualizar el estado local
+        setTx(prev => prev ? { ...prev, status: newStatus as any } : null);
+      }
+    };
+
+    const handleStatusChange = (payload: any) => {
+      console.log('transaction.status_changed recibido en ConfirmPage:', payload);
+      
+      const payloadTxCode = payload.transaction_code;
+      
+      if (payloadTxCode && String(payloadTxCode) === String(txId)) {
+        const newStatus = humanizeStatus(payload.new_status || payload.status, tx.type === 'buy' ? 'buy_card' : 'sell_cash');
+        
+        toast.success('Estado actualizado', {
+          description: `Tu transacción cambió a: ${newStatus}`,
+        });
+        
+        setTx(prev => prev ? { ...prev, status: newStatus as any } : null);
+      }
+    };
+
+    socket.on('transaction.updated', handleTransactionUpdate);
+    socket.on('transaction.status_changed', handleStatusChange);
+
+    return () => {
+      socket.off('transaction.updated', handleTransactionUpdate);
+      socket.off('transaction.status_changed', handleStatusChange);
+    };
+  }, [tx, txId]);
 
   // rates polling removed (no uso actual en esta vista)
 
@@ -332,7 +385,8 @@ const ConfirmPage = () => {
   const toLabel = 'Recibes';
   // Ocultar métodos de pago si la transacción ya está pagada (solo 'paid'/'pagado')
   const humanStatus = (tx.status || '').toString().toLowerCase();
-  const isPaid = humanStatus.includes('pagado') || humanStatus.includes('paid');
+  const showPaymentMethod = humanStatus.includes('pagado') || humanStatus.includes('paid') || humanStatus.includes('ready_for_pickup') || humanStatus.includes('ready_to_receive')
+    || humanStatus.includes('completed') || humanStatus.includes('cancelled') || humanStatus.includes('expired');
 
   const formatPrettyDate = (ts: number) => {
     try {
@@ -451,7 +505,7 @@ const ConfirmPage = () => {
           </div>
 
           {/* Método de Pago - Solo para compras (oculto si ya pagado/completado) */}
-          {isBuying && tx.method && !isPaid && (
+          {isBuying && tx.method && !showPaymentMethod && (
             <div className="bg-white shadow-sm p-6 border border-gray-200 rounded-xl">
               <h2 className="mb-4 font-semibold text-gray-900 text-lg">Método de Pago</h2>
 

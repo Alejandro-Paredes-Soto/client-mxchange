@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from 'react';
+import { SocketProvider, useNotifications } from '@/providers/SocketProvider';
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -16,78 +18,21 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { Package, Users, Eye, Settings, BarChart3, LogOut, Search, Bell } from "lucide-react";
-import { useNotifications, SocketProvider } from '@/providers/SocketProvider';
+import { DollarSign, ArrowLeftRight, History, LogOut, Bell } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { useState, useEffect } from "react";
-import Cookies from 'js-cookie';
 
-const menuItems = [
-  {
-    title: "Dashboard",
-    url: "/admin",
-    icon: BarChart3,
-    roles: ['admin', 'sucursal'], // Ambos roles pueden ver
-  },
-  {
-    title: "Ver Inventario",
-    url: "/admin/inventory",
-    icon: Package,
-    roles: ['admin', 'sucursal'],
-  },
-  {
-    title: "Gestionar Usuarios",
-    url: "/admin/users",
-    icon: Users,
-    roles: ['admin', 'sucursal'],
-  },
-  {
-    title: "Ver Transacciones",
-    url: "/admin/transactions",
-    icon: Eye,
-    roles: ['admin', 'sucursal'],
-  },
-  {
-    title: "Buscar Transacción",
-    url: "/admin/transactions/lookup",
-    icon: Search,
-    roles: ['admin', 'sucursal'],
-  },
-  {
-    title: "Configuración",
-    url: "/admin/config",
-    icon: Settings,
-    roles: ['admin'], // Solo admin puede ver
-  },
-];
-
-// Componente interno que SÍ puede usar useNotifications
-function AdminLayoutContent({ children }: { children: React.ReactNode }) {
+// Componente interno que usa useNotifications
+function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { notifications, unreadCount, markAllAsRead, reloadFromServer } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Decodificar el token para obtener el rol del usuario
-    const token = Cookies.get('token');
-    if (token) {
-      try {
-        const parts = token.split('.');
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1]));
-          setUserRole(payload.role || null);
-        }
-      } catch (err) {
-        console.error('Error decoding token:', err);
-      }
-    }
-  }, []);
-
-  console.log('[ADMIN] notifications:', notifications);
-  console.log('[ADMIN] unreadCount:', unreadCount);
-  console.log('[ADMIN] userRole:', userRole);
+  const menuItems = [
+    { title: "Comprar dólares", url: "/inicio?mode=buy", icon: DollarSign },
+    { title: "Vender dólares", url: "/inicio?mode=sell", icon: ArrowLeftRight },
+    { title: "Mis movimientos", url: "/mis-movimientos", icon: History },
+  ];
 
   async function handleLogout() {
     try {
@@ -103,33 +48,32 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     if (open) {
       // Marcar como leídas INMEDIATAMENTE para que el contador desaparezca
       await markAllAsRead();
-      console.log('[ADMIN] Abriendo notificaciones, recargando...');
+      console.log('Abriendo notificaciones, recargando...');
       // Luego recargar las notificaciones del servidor
       await reloadFromServer();
     }
     setNotifOpen(open);
   };
 
-  // Filtrar elementos del menú según el rol del usuario
-  const filteredMenuItems = menuItems.filter(item => {
-    if (!userRole) return false;
-    return item.roles.includes(userRole);
-  });
-
   return (
     <SidebarProvider>
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-4 py-2">
-            <h2 className="font-semibold text-lg">Admin Panel</h2>
+            <h2
+              className="font-semibold text-lg cursor-pointer"
+              onClick={() => router.push('/inicio')}
+            >
+              MXChange
+            </h2>
           </div>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Accesos Rápidos</SidebarGroupLabel>
+            <SidebarGroupLabel>Menú</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {filteredMenuItems.map((item) => (
+                {menuItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
@@ -191,8 +135,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
                 ) : (
                   <ul className="space-y-2">
                     {notifications.map((n, idx) => (
-                      <li 
-                        key={idx} 
+                      <li
+                        key={idx}
                         className={`border rounded p-3 ${n.read ? 'bg-white' : 'bg-blue-50'}`}
                       >
                         <div className="font-medium text-sm">{n.title}</div>
@@ -213,22 +157,20 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col flex-1 gap-4 p-4">
           {children}
         </div>
-        {/* Toaster provided at root layout to avoid duplicates */}
       </SidebarInset>
     </SidebarProvider>
   );
 }
 
-// Layout principal que envuelve con los providers
-export default function AdminLayout({
+// Layout principal para clientes
+export default function ClientLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    // Proveer socket específico para el área de admin (separado del provider root)
     <SocketProvider>
-      <AdminLayoutContent>{children}</AdminLayoutContent>
+      <ClientLayoutContent>{children}</ClientLayoutContent>
     </SocketProvider>
   );
 }

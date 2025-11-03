@@ -18,13 +18,13 @@ export default function ErrorClientComponent() {
   return (
     <div
       style={{ maxWidth: "400px", margin: "20px auto" }}
-      className="bg-red-50 border border-red-400 text-red-700 rounded-lg shadow-md  flex flex-col items-center p-4"
+      className="flex flex-col items-center bg-red-50 shadow-md p-4 border border-red-400 rounded-lg text-red-700"
     >
-      <h2 className="text-xl font-semibold mb-2">¡Error!</h2>
+      <h2 className="mb-2 font-semibold text-xl">¡Error!</h2>
       <p className="mb-4 text-center">{errorMessage}</p>
       <a
-        href="/principal"
-        className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition-colors duration-200"
+        href="/login"
+        className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded text-white transition-colors duration-200"
       >
         Volver a la pagina principal
       </a>

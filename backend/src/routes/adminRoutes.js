@@ -3,17 +3,21 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const { authenticate } = require('../middlewares/auth');
 const { isAdmin } = require('../middlewares/isAdmin');
+const { isSucursalOrAdmin } = require('../middlewares/isSucursalOrAdmin');
 
-router.get('/inventory', authenticate, isAdmin, adminController.getInventory);
-router.put('/inventory', authenticate, isAdmin, adminController.updateInventory);
-router.get('/inventory/history/:branchId', authenticate, isAdmin, adminController.getInventoryHistory);
-router.get('/transactions', authenticate, isAdmin, adminController.listAllTransactions);
-router.put('/transactions/:id/status', authenticate, isAdmin, adminController.changeTransactionStatus);
-router.get('/transactions/:id', authenticate, isAdmin, adminController.getTransactionDetails);
-router.get('/dashboard/kpis', authenticate, isAdmin, adminController.getDashboardKPIs);
-router.get('/dashboard/chart', authenticate, isAdmin, adminController.getDashboardChartData);
-router.get('/dashboard/inventory-summary', authenticate, isAdmin, adminController.getInventorySummary);
-router.get('/dashboard/recent-transactions', authenticate, isAdmin, adminController.getRecentTransactions);
+// Rutas accesibles tanto por admin como por sucursal
+router.get('/inventory', authenticate, isSucursalOrAdmin, adminController.getInventory);
+router.put('/inventory', authenticate, isSucursalOrAdmin, adminController.updateInventory);
+router.get('/inventory/history/:branchId', authenticate, isSucursalOrAdmin, adminController.getInventoryHistory);
+router.get('/transactions', authenticate, isSucursalOrAdmin, adminController.listAllTransactions);
+router.put('/transactions/:id/status', authenticate, isSucursalOrAdmin, adminController.changeTransactionStatus);
+router.get('/transactions/:id', authenticate, isSucursalOrAdmin, adminController.getTransactionDetails);
+router.get('/dashboard/kpis', authenticate, isSucursalOrAdmin, adminController.getDashboardKPIs);
+router.get('/dashboard/chart', authenticate, isSucursalOrAdmin, adminController.getDashboardChartData);
+router.get('/dashboard/inventory-summary', authenticate, isSucursalOrAdmin, adminController.getInventorySummary);
+router.get('/dashboard/recent-transactions', authenticate, isSucursalOrAdmin, adminController.getRecentTransactions);
+
+// Rutas exclusivas de admin (gestión de usuarios, sucursales, tasas, etc.)
 router.get('/users', authenticate, isAdmin, adminController.listUsers);
 router.get('/users/:id', authenticate, isAdmin, adminController.getUserProfile);
 router.put('/users/:id/status', authenticate, isAdmin, adminController.toggleUserStatus);

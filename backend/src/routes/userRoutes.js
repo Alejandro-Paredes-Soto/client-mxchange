@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 
-router.post('/login', authController.login);
-router.post('/register', authController.register);
+// Ruta para login con Google
 router.post('/loginGoogle', authController.loginGoogle);
 
 module.exports = router;

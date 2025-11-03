@@ -260,16 +260,94 @@ const webhook = async (req, res, next) => {
           if (txIdToUpdate) {
             try {
               await pool.query('UPDATE transactions SET status = ? WHERE id = ?', ['paid', txIdToUpdate]);
+              
+              // Obtener información de la transacción para notificaciones
+              const [txInfoRows] = await pool.query('SELECT user_id, transaction_code, branch_id FROM transactions WHERE id = ?', [txIdToUpdate]);
+              const txInfo = txInfoRows && txInfoRows[0] ? txInfoRows[0] : null;
+              
               // Además, marcar reserva de inventario como committed
               try {
                 await pool.query('UPDATE inventory_reservations SET status = ?, committed_at = NOW() WHERE transaction_id = ? AND status = ?', ['committed', txIdToUpdate, 'reserved']);
               } catch (resErr) {
                 console.warn('No se pudo actualizar inventory_reservations a committed:', resErr && resErr.message ? resErr.message : resErr);
               }
+              
+              // Notificar al cliente sobre pago exitoso
+              if (txInfo && txInfo.user_id) {
+                try {
+                  await pool.query(
+                    'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+                    ['user', txInfo.user_id, null, 'Pago confirmado', `Tu pago para la operación ${txInfo.transaction_code} ha sido confirmado exitosamente.`, 'payment_confirmed', txIdToUpdate]
+                  );
+                } catch (insErr) {
+                  console.warn('No se pudo guardar notificación de pago confirmado:', insErr && insErr.message ? insErr.message : insErr);
+                }
+                
+                if (global && global.io) {
+                  try {
+                    global.io.to(`user:${txInfo.user_id}`).emit('notification', {
+                      title: 'Pago confirmado',
+                      message: `Tu pago para la operación ${txInfo.transaction_code} ha sido confirmado exitosamente.`,
+                      event_type: 'payment_confirmed',
+                      transaction_id: txIdToUpdate,
+                      created_at: new Date().toISOString()
+                    });
+                  } catch (emitErr) {
+                    console.warn('No se pudo emitir notificación de pago confirmado:', emitErr && emitErr.message ? emitErr.message : emitErr);
+                  }
+                }
+              }
+              
+              // Notificar a admins sobre pago confirmado
               try {
-                await pool.query('UPDATE inventory_reservations SET status = ?, committed_at = NOW() WHERE transaction_id = ? AND status = ?', ['committed', txIdToUpdate, 'reserved']);
-              } catch (resErr) {
-                console.warn('No se pudo actualizar inventory_reservations a committed (existing payment):', resErr && resErr.message ? resErr.message : resErr);
+                await pool.query(
+                  'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+                  ['admin', null, null, 'Pago confirmado', `Pago confirmado para operación ${txInfo ? txInfo.transaction_code : txIdToUpdate}`, 'payment_confirmed', txIdToUpdate]
+                );
+              } catch (insErr) {
+                console.warn('No se pudo guardar notificación admin de pago confirmado:', insErr && insErr.message ? insErr.message : insErr);
+              }
+              
+              if (global && global.io) {
+                try {
+                  global.io.to('admins').emit('notification', {
+                    title: 'Pago confirmado',
+                    message: `Pago confirmado para operación ${txInfo ? txInfo.transaction_code : txIdToUpdate}`,
+                    event_type: 'payment_confirmed',
+                    transaction_id: txIdToUpdate,
+                    branch_id: txInfo ? txInfo.branch_id : null,
+                    created_at: new Date().toISOString()
+                  });
+                } catch (emitErr) {
+                  console.warn('No se pudo emitir notificación admin de pago confirmado:', emitErr && emitErr.message ? emitErr.message : emitErr);
+                }
+              }
+              
+              // Notificar a sucursal sobre pago confirmado
+              if (txInfo && txInfo.branch_id) {
+                try {
+                  await pool.query(
+                    'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+                    ['sucursal', null, txInfo.branch_id, 'Pago confirmado', `Pago confirmado para operación ${txInfo.transaction_code}`, 'payment_confirmed', txIdToUpdate]
+                  );
+                } catch (insErr) {
+                  console.warn('No se pudo guardar notificación sucursal de pago confirmado:', insErr && insErr.message ? insErr.message : insErr);
+                }
+                
+                if (global && global.io) {
+                  try {
+                    global.io.to(`branch:${txInfo.branch_id}`).emit('notification', {
+                      title: 'Pago confirmado',
+                      message: `Pago confirmado para operación ${txInfo.transaction_code}`,
+                      event_type: 'payment_confirmed',
+                      transaction_id: txIdToUpdate,
+                      branch_id: txInfo.branch_id,
+                      created_at: new Date().toISOString()
+                    });
+                  } catch (emitErr) {
+                    console.warn('No se pudo emitir notificación sucursal de pago confirmado:', emitErr && emitErr.message ? emitErr.message : emitErr);
+                  }
+                }
               }
             } catch (txErr) {
               console.warn('No se pudo actualizar transacción a paid desde webhook:', txErr && txErr.message ? txErr.message : txErr);
@@ -282,9 +360,10 @@ const webhook = async (req, res, next) => {
 
           // Si tenemos txCode, enlazar la transacción y marcar como paid
           if (txCode) {
-            const [rows] = await pool.query('SELECT id FROM transactions WHERE transaction_code = ? LIMIT 1', [txCode]);
+            const [rows] = await pool.query('SELECT id, user_id, transaction_code, branch_id FROM transactions WHERE transaction_code = ? LIMIT 1', [txCode]);
             if (rows && rows.length) {
               const tId = rows[0].id;
+              const txInfo = rows[0];
               try {
                 await pool.query('UPDATE payments SET transaction_id = ? WHERE id = ?', [tId, paymentId]);
                 await pool.query('UPDATE transactions SET status = ? WHERE id = ?', ['paid', tId]);
@@ -292,6 +371,59 @@ const webhook = async (req, res, next) => {
                   await pool.query('UPDATE inventory_reservations SET status = ?, committed_at = NOW() WHERE transaction_id = ? AND status = ?', ['committed', tId, 'reserved']);
                 } catch (resErr) {
                   console.warn('No se pudo actualizar inventory_reservations a committed (new payment):', resErr && resErr.message ? resErr.message : resErr);
+                }
+                
+                // Notificar al cliente sobre pago exitoso
+                if (txInfo.user_id) {
+                  try {
+                    await pool.query(
+                      'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+                      ['user', txInfo.user_id, null, 'Pago confirmado', `Tu pago para la operación ${txInfo.transaction_code} ha sido confirmado exitosamente.`, 'payment_confirmed', tId]
+                    );
+                  } catch (insErr) {
+                    console.warn('No se pudo guardar notificación de pago confirmado (new payment):', insErr && insErr.message ? insErr.message : insErr);
+                  }
+                  
+                  if (global && global.io) {
+                    try {
+                      global.io.to(`user:${txInfo.user_id}`).emit('notification', {
+                        title: 'Pago confirmado',
+                        message: `Tu pago para la operación ${txInfo.transaction_code} ha sido confirmado exitosamente.`,
+                        event_type: 'payment_confirmed',
+                        transaction_id: tId,
+                        created_at: new Date().toISOString()
+                      });
+                    } catch (emitErr) {
+                      console.warn('No se pudo emitir notificación de pago confirmado (new payment):', emitErr && emitErr.message ? emitErr.message : emitErr);
+                    }
+                  }
+                }
+                
+                // Notificar a sucursal
+                if (txInfo.branch_id) {
+                  try {
+                    await pool.query(
+                      'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+                      ['sucursal', null, txInfo.branch_id, 'Pago confirmado', `Pago confirmado para operación ${txInfo.transaction_code}`, 'payment_confirmed', tId]
+                    );
+                  } catch (insErr) {
+                    console.warn('No se pudo guardar notificación sucursal de pago confirmado (new payment):', insErr && insErr.message ? insErr.message : insErr);
+                  }
+                  
+                  if (global && global.io) {
+                    try {
+                      global.io.to(`branch:${txInfo.branch_id}`).emit('notification', {
+                        title: 'Pago confirmado',
+                        message: `Pago confirmado para operación ${txInfo.transaction_code}`,
+                        event_type: 'payment_confirmed',
+                        transaction_id: tId,
+                        branch_id: txInfo.branch_id,
+                        created_at: new Date().toISOString()
+                      });
+                    } catch (emitErr) {
+                      console.warn('No se pudo emitir notificación sucursal de pago confirmado (new payment):', emitErr && emitErr.message ? emitErr.message : emitErr);
+                    }
+                  }
                 }
               } catch (uErr) {
                 console.warn('No se pudo actualizar payment/transaction tras insertar payment desde webhook:', uErr && uErr.message ? uErr.message : uErr);
@@ -309,10 +441,14 @@ const webhook = async (req, res, next) => {
       console.log('Pago fallido/expirado (webhook):', event.type);
       // Intentar encontrar tx por metadata
       let txId = null;
+      let txInfo = null;
       try {
         if (obj && obj.metadata && obj.metadata.transaction_code) {
-          const [txRows] = await pool.query('SELECT id FROM transactions WHERE transaction_code = ? LIMIT 1', [obj.metadata.transaction_code]);
-          if (txRows && txRows.length) txId = txRows[0].id;
+          const [txRows] = await pool.query('SELECT id, user_id, transaction_code, branch_id FROM transactions WHERE transaction_code = ? LIMIT 1', [obj.metadata.transaction_code]);
+          if (txRows && txRows.length) {
+            txId = txRows[0].id;
+            txInfo = txRows[0];
+          }
         }
       } catch (ignore) {}
 
@@ -333,6 +469,66 @@ const webhook = async (req, res, next) => {
           }
         } catch (qErr) {
           console.error('Error buscando inventory_reservations para liberar:', qErr && qErr.message ? qErr.message : qErr);
+        }
+        
+        // Marcar transacción como cancelled
+        try {
+          await pool.query('UPDATE transactions SET status = ? WHERE id = ?', ['cancelled', txId]);
+        } catch (txErr) {
+          console.warn('No se pudo actualizar transacción a cancelled:', txErr && txErr.message ? txErr.message : txErr);
+        }
+        
+        // Notificar al cliente sobre pago fallido
+        if (txInfo && txInfo.user_id) {
+          try {
+            await pool.query(
+              'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+              ['user', txInfo.user_id, null, 'Pago fallido', `El pago para la operación ${txInfo.transaction_code} no se pudo procesar. La reserva ha sido liberada.`, 'payment_failed', txId]
+            );
+          } catch (insErr) {
+            console.warn('No se pudo guardar notificación de pago fallido:', insErr && insErr.message ? insErr.message : insErr);
+          }
+          
+          if (global && global.io) {
+            try {
+              global.io.to(`user:${txInfo.user_id}`).emit('notification', {
+                title: 'Pago fallido',
+                message: `El pago para la operación ${txInfo.transaction_code} no se pudo procesar. La reserva ha sido liberada.`,
+                event_type: 'payment_failed',
+                transaction_id: txId,
+                created_at: new Date().toISOString()
+              });
+            } catch (emitErr) {
+              console.warn('No se pudo emitir notificación de pago fallido:', emitErr && emitErr.message ? emitErr.message : emitErr);
+            }
+          }
+        }
+        
+        // Notificar a sucursal sobre pago fallido
+        if (txInfo && txInfo.branch_id) {
+          try {
+            await pool.query(
+              'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+              ['sucursal', null, txInfo.branch_id, 'Pago fallido', `El pago para la operación ${txInfo.transaction_code} falló. Reserva liberada.`, 'payment_failed', txId]
+            );
+          } catch (insErr) {
+            console.warn('No se pudo guardar notificación sucursal de pago fallido:', insErr && insErr.message ? insErr.message : insErr);
+          }
+          
+          if (global && global.io) {
+            try {
+              global.io.to(`branch:${txInfo.branch_id}`).emit('notification', {
+                title: 'Pago fallido',
+                message: `El pago para la operación ${txInfo.transaction_code} falló. Reserva liberada.`,
+                event_type: 'payment_failed',
+                transaction_id: txId,
+                branch_id: txInfo.branch_id,
+                created_at: new Date().toISOString()
+              });
+            } catch (emitErr) {
+              console.warn('No se pudo emitir notificación sucursal de pago fallido:', emitErr && emitErr.message ? emitErr.message : emitErr);
+            }
+          }
         }
       }
     }

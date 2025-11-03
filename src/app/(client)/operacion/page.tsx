@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getRatesMock, Rates } from '../services/api';
+import { getRatesMock, Rates } from '../../services/api';
 import { useEffect, useState } from 'react';
 import OperationForm from '@/components/OperationForm';
 

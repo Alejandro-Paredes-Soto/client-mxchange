@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useUtils from "../services/utils";
+import useUtils from "../../services/utils";
 
 const useForgotPassword = () => {
   
