@@ -219,7 +219,6 @@ html {
   }
 }
 
-/* Safe rule to reserve space for the desktop sidebar */
 @media (min-width: 768px) {
 
   .sidebar-wrapper[data-side="left"]~main,
