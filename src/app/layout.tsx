@@ -21,6 +21,7 @@ export default function RootLayout({
           expand={true}
           closeButton
           theme="dark"
+          
         />
       </body>
     </html>
