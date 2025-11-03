@@ -86,7 +86,7 @@ const AdminConfigPage = () => {
       setRates(r);
       setEditRates({ buy: String(r.buy), sell: String(r.sell) });
       setLoadingRates(false);
-      
+
       const b = await listBranchesAdmin(token);
       setBranches(b);
       const a = await getAlertSettings(token);
@@ -102,20 +102,20 @@ const AdminConfigPage = () => {
   const onUpdateRates = async () => {
     const token = Cookies.get('token');
     if (!token) return;
-    
+
     const buy = Number(editRates.buy);
     const sell = Number(editRates.sell);
-    
+
     if (Number.isNaN(buy) || Number.isNaN(sell)) {
       toast.error('Valores de tasas inválidos');
       return;
     }
-    
+
     if (buy <= 0 || sell <= 0) {
       toast.error('Las tasas deben ser mayores a 0');
       return;
     }
-    
+
     const result = await updateRates({ buy, sell }, token);
     if (result && !result.error) {
       setRates({ buy, sell });
@@ -128,7 +128,7 @@ const AdminConfigPage = () => {
   const onAddBranch = async () => {
     const token = Cookies.get('token');
     if (!token) return;
-    
+
     // Validaciones
     if (!newBranchData.name.trim()) {
       toast.error('El nombre de la sucursal es requerido');
@@ -146,7 +146,7 @@ const AdminConfigPage = () => {
       toast.error('La contraseña es requerida');
       return;
     }
-    
+
     const result = await createBranch(newBranchData, token);
     if (result && result.error) {
       toast.error(result.error.message || 'Error al crear sucursal');
@@ -162,7 +162,7 @@ const AdminConfigPage = () => {
   const onUpdateBranch = async (id: number) => {
     const token = Cookies.get('token');
     if (!token) return;
-    
+
     // Validaciones
     if (!editBranchData.name.trim()) {
       toast.error('El nombre de la sucursal es requerido');
@@ -176,18 +176,18 @@ const AdminConfigPage = () => {
       toast.error('El email es requerido');
       return;
     }
-    
+
     const payload: any = {
       name: editBranchData.name,
       address: editBranchData.address,
       email: editBranchData.email
     };
-    
+
     // Solo incluir password si se proporcionó uno nuevo
     if (editBranchData.password.trim()) {
       payload.password = editBranchData.password;
     }
-    
+
     const result = await updateBranch(id, payload, token);
     if (result && result.error) {
       toast.error(result.error.message || 'Error al actualizar sucursal');
@@ -204,7 +204,7 @@ const AdminConfigPage = () => {
   const onDeleteBranch = async (id: number) => {
     const token = Cookies.get('token');
     if (!token) return;
-    
+
     const result = await deleteBranch(id, token);
     if (result && result.error) {
       toast.error('Error al eliminar sucursal');
@@ -281,12 +281,12 @@ const AdminConfigPage = () => {
                 <Label htmlFor="buy-rate" className="font-medium text-sm">
                   Tasa de Compra (USD)
                 </Label>
-                <NumberInput 
+                <NumberInput
                   id="buy-rate"
                   decimals={4}
-                  value={editRates.buy} 
+                  value={editRates.buy}
                   placeholder={loadingRates ? 'Cargando...' : '17.8000'}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditRates({...editRates, buy: e.target.value})} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditRates({ ...editRates, buy: e.target.value })}
                   className="h-10"
                 />
                 <p className="text-muted-foreground text-xs">
@@ -297,12 +297,12 @@ const AdminConfigPage = () => {
                 <Label htmlFor="sell-rate" className="font-medium text-sm">
                   Tasa de Venta (USD)
                 </Label>
-                <NumberInput 
+                <NumberInput
                   id="sell-rate"
                   decimals={4}
-                  value={editRates.sell} 
+                  value={editRates.sell}
                   placeholder={loadingRates ? 'Cargando...' : '18.2000'}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditRates({...editRates, sell: e.target.value})} 
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditRates({ ...editRates, sell: e.target.value })}
                   className="h-10"
                 />
                 <p className="text-muted-foreground text-xs">
@@ -310,8 +310,8 @@ const AdminConfigPage = () => {
                 </p>
               </div>
             </div>
-            <Button 
-              onClick={onUpdateRates} 
+            <Button
+              onClick={onUpdateRates}
               size="default"
               className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
             >
@@ -334,16 +334,16 @@ const AdminConfigPage = () => {
                 <Label htmlFor="commission" className="font-medium text-sm">
                   Porcentaje (%)
                 </Label>
-                <NumberInput 
+                <NumberInput
                   id="commission"
                   decimals={2}
-                  value={commission} 
-                  placeholder={loadingCommission ? 'Cargando...' : '0.00'} 
+                  value={commission}
+                  placeholder={loadingCommission ? 'Cargando...' : '0.00'}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCommission(e.target.value)}
                   className="h-10"
                 />
               </div>
-              <Button 
+              <Button
                 onClick={onUpdateCommission}
                 size="default"
                 className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
@@ -383,7 +383,7 @@ const AdminConfigPage = () => {
                       <Input
                         id="branch-name"
                         value={newBranchData.name}
-                        onChange={(e) => setNewBranchData({...newBranchData, name: e.target.value})}
+                        onChange={(e) => setNewBranchData({ ...newBranchData, name: e.target.value })}
                         placeholder="Ej: Sucursal Centro"
                       />
                     </div>
@@ -392,7 +392,7 @@ const AdminConfigPage = () => {
                       <Input
                         id="branch-address"
                         value={newBranchData.address}
-                        onChange={(e) => setNewBranchData({...newBranchData, address: e.target.value})}
+                        onChange={(e) => setNewBranchData({ ...newBranchData, address: e.target.value })}
                         placeholder="Ej: Av. Principal #123"
                       />
                     </div>
@@ -402,7 +402,7 @@ const AdminConfigPage = () => {
                         id="branch-email"
                         type="email"
                         value={newBranchData.email}
-                        onChange={(e) => setNewBranchData({...newBranchData, email: e.target.value})}
+                        onChange={(e) => setNewBranchData({ ...newBranchData, email: e.target.value })}
                         placeholder="usuario@ejemplo.com"
                       />
                     </div>
@@ -412,8 +412,8 @@ const AdminConfigPage = () => {
                         id="branch-password"
                         type="password"
                         value={newBranchData.password}
-                        onChange={(e) => setNewBranchData({...newBranchData, password: e.target.value})}
-                        placeholder="••••••••"
+                        onChange={(e) => setNewBranchData({ ...newBranchData, password: e.target.value })}
+                        placeholder="•••••••••"
                       />
                     </div>
                   </div>
@@ -446,8 +446,8 @@ const AdminConfigPage = () => {
             ) : (
               <div className="space-y-3">
                 {branches.map((b) => (
-                  <div 
-                    key={b.id} 
+                  <div
+                    key={b.id}
                     className="flex sm:flex-row flex-col justify-between sm:items-center gap-4 hover:bg-accent/50 p-4 border rounded-lg transition-colors"
                   >
                     <div className="space-y-1">
@@ -460,15 +460,15 @@ const AdminConfigPage = () => {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        onClick={() => openEditDialog(b)} 
+                      <Button
+                        onClick={() => openEditDialog(b)}
                         variant="secondary"
                         size="sm"
                       >
                         Editar
                       </Button>
-                      <Button 
-                        onClick={() => openDeleteDialog(b.id)} 
+                      <Button
+                        onClick={() => openDeleteDialog(b.id)}
                         variant="destructive"
                         size="sm"
                       >
@@ -500,7 +500,7 @@ const AdminConfigPage = () => {
                   </p>
                 </div>
               </div>
-              <Button 
+              <Button
                 onClick={onUpdateAlerts}
                 size="default"
                 className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
@@ -527,7 +527,7 @@ const AdminConfigPage = () => {
               <Input
                 id="edit-branch-name"
                 value={editBranchData.name}
-                onChange={(e) => setEditBranchData({...editBranchData, name: e.target.value})}
+                onChange={(e) => setEditBranchData({ ...editBranchData, name: e.target.value })}
                 placeholder="Ej: Sucursal Centro"
               />
             </div>
@@ -536,7 +536,7 @@ const AdminConfigPage = () => {
               <Input
                 id="edit-branch-address"
                 value={editBranchData.address}
-                onChange={(e) => setEditBranchData({...editBranchData, address: e.target.value})}
+                onChange={(e) => setEditBranchData({ ...editBranchData, address: e.target.value })}
                 placeholder="Ej: Av. Principal #123"
               />
             </div>
@@ -546,7 +546,7 @@ const AdminConfigPage = () => {
                 id="edit-branch-email"
                 type="email"
                 value={editBranchData.email}
-                onChange={(e) => setEditBranchData({...editBranchData, email: e.target.value})}
+                onChange={(e) => setEditBranchData({ ...editBranchData, email: e.target.value })}
                 placeholder="usuario@ejemplo.com"
               />
             </div>
@@ -556,7 +556,7 @@ const AdminConfigPage = () => {
                 id="edit-branch-password"
                 type="password"
                 value={editBranchData.password}
-                onChange={(e) => setEditBranchData({...editBranchData, password: e.target.value})}
+                onChange={(e) => setEditBranchData({ ...editBranchData, password: e.target.value })}
                 placeholder="Dejar vacío para no cambiar"
               />
               <p className="text-muted-foreground text-xs">

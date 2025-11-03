@@ -36,7 +36,7 @@ const AdminDashboard = () => {
 
   return (
     <section className="p-5">
-      <h1 className="mb-4 font-bold text-primary text-2xl">Dashboard Admin</h1>
+      <h1 className="mb-4 font-bold text-primary text-2xl">Dashboard</h1>
 
       <div className="mb-6">
         <h3 className="mb-2 font-semibold text-primary text-xl">Accesos Rápidos</h3>
