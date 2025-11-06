@@ -55,12 +55,15 @@ const listNotifications = async (req, res, next) => {
 
 const markAllAsRead = async (req, res, next) => {
   try {
+    console.log('[markAllAsRead] Iniciando...');
     const user = req.user || {};
     const userId = user.id || user.idUser || null;
     
     // Determinar el rol del usuario
     let userRole = String(user.role || user.rol || '').toLowerCase();
     let userBranchId = user.branch_id || null;
+    
+    console.log('[markAllAsRead] Usuario:', { userId, userRole, userBranchId });
     
     // Si no tenemos rol o branch_id en el token, consultar la BD
     if (!userRole || (userRole === 'sucursal' && !userBranchId)) {
@@ -69,22 +72,32 @@ const markAllAsRead = async (req, res, next) => {
         if (userRows && userRows[0]) {
           userRole = String(userRows[0].role || '').toLowerCase();
           userBranchId = userRows[0].branch_id;
+          console.log('[markAllAsRead] Rol actualizado desde BD:', { userRole, userBranchId });
         }
       }
     }
 
+    let result;
     if (userRole === 'admin') {
-      await pool.query('UPDATE notifications SET read_at = NOW() WHERE recipient_role = ? AND read_at IS NULL', ['admin']);
+      console.log('[markAllAsRead] Marcando notificaciones de admin...');
+      result = await pool.query('UPDATE notifications SET read_at = NOW() WHERE recipient_role = ? AND read_at IS NULL', ['admin']);
+      console.log('[markAllAsRead] Notificaciones admin marcadas:', result[0].affectedRows);
     } else if (userRole === 'sucursal' && userBranchId) {
-      await pool.query('UPDATE notifications SET read_at = NOW() WHERE recipient_role = ? AND branch_id = ? AND read_at IS NULL', ['sucursal', userBranchId]);
+      console.log('[markAllAsRead] Marcando notificaciones de sucursal:', userBranchId);
+      result = await pool.query('UPDATE notifications SET read_at = NOW() WHERE recipient_role = ? AND branch_id = ? AND read_at IS NULL', ['sucursal', userBranchId]);
+      console.log('[markAllAsRead] Notificaciones sucursal marcadas:', result[0].affectedRows);
     } else if (userId) {
-      await pool.query('UPDATE notifications SET read_at = NOW() WHERE recipient_role = ? AND recipient_user_id = ? AND read_at IS NULL', ['user', userId]);
+      console.log('[markAllAsRead] Marcando notificaciones de usuario:', userId);
+      result = await pool.query('UPDATE notifications SET read_at = NOW() WHERE recipient_role = ? AND recipient_user_id = ? AND read_at IS NULL', ['user', userId]);
+      console.log('[markAllAsRead] Notificaciones usuario marcadas:', result[0].affectedRows);
     } else {
+      console.log('[markAllAsRead] Sin autorización');
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, affectedRows: result[0].affectedRows });
   } catch (err) {
+    console.error('[markAllAsRead] Error:', err);
     next(err);
   }
 };

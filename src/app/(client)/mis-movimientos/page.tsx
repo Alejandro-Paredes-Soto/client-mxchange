@@ -1,25 +1,13 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
 import { listTransactionsMock, getUserTransactions, Transaction, BackendTransaction } from '../../services/api';
-import { humanizeStatus, getStatusColor } from '@/lib/statuses';
-import Image from 'next/image';
+import { humanizeStatus } from '@/lib/statuses';
 import Cookies from 'js-cookie';
-import Link from 'next/link';
+import { TransactionCard } from '@/components/TransactionCard';
 // shadcn components: si no están, se usan elementos nativos con clases similares
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-
-
-const humanizeType = (t: 'buy' | 'sell') => (t === 'buy' ? 'Compra de Dólares' : 'Venta de Dólares');
-const formatAmount = (n: number) => Number(n).toFixed(2);
-const humanizeMethod = (m?: string) => {
-  if (!m) return 'N/A';
-  const v = m.toLowerCase();
-  if (v.includes('transfer') || v.includes('transferencia')) return 'Transferencia';
-  if (v.includes('vent') || v.includes('cash') || v.includes('efectivo') || v.includes('sucursal')) return 'Ventanilla';
-  return m;
-};
 
 const mapBackend = (b: BackendTransaction): Transaction => {
   const id = b.transaction_code ? String(b.transaction_code) : b.id ? String(b.id) : '';
@@ -130,203 +118,122 @@ const MisMovimientos = () => {
   }, [items, qFolio, statusFilter, dateFrom, dateTo]);
 
   if (loading) return (
-    <div className="mx-auto p-5 max-w-7xl">
-      <h1 className="mb-6 font-bold text-primary text-3xl">Mis Movimientos</h1>
-      <div className="text-gray-600">Cargando transacciones...</div>
+    <div className="mx-auto p-6 max-w-7xl">
+      <div className="mb-8">
+        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
+      </div>
+      <div className="bg-card p-8 border rounded-lg text-center">
+        <div className="space-y-4 animate-pulse">
+          <div className="bg-muted mx-auto rounded w-1/4 h-4"></div>
+          <div className="bg-muted mx-auto rounded w-1/2 h-4"></div>
+        </div>
+        <p className="mt-4 text-muted-foreground">Cargando transacciones...</p>
+      </div>
     </div>
   );
 
   if (error) return (
-    <div className="mx-auto p-5 max-w-7xl">
-      <h1 className="mb-6 font-bold text-primary text-3xl">Mis Movimientos</h1>
-      <div className="bg-red-50 p-4 border border-red-200 rounded-lg text-red-700">{error}</div>
+    <div className="mx-auto p-6 max-w-7xl">
+      <div className="mb-8">
+        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
+      </div>
+      <div className="bg-destructive/10 p-6 border border-destructive/20 rounded-lg">
+        <p className="font-medium text-destructive">{error}</p>
+      </div>
     </div>
   );
 
   if (!items || items.length === 0) return (
-    <div className="mx-auto p-5 max-w-7xl">
-      <h1 className="mb-6 font-bold text-primary text-3xl">Mis Movimientos</h1>
-      <div className="bg-gray-50 p-8 border border-gray-200 rounded-lg text-gray-600 text-center">
-        No hay transacciones registradas.
+    <div className="mx-auto p-6 max-w-7xl">
+      <div className="mb-8">
+        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
+      </div>
+      <div className="bg-card p-12 border rounded-lg text-center">
+        <div className="mb-4 text-muted-foreground text-5xl">📭</div>
+        <h3 className="mb-2 font-semibold text-xl">No hay transacciones</h3>
+        <p className="text-muted-foreground">Aún no has realizado ninguna transacción.</p>
       </div>
     </div>
   );
 
   return (
-    <section className="mx-auto p-5 max-w-7xl">
-      <h1 className="mb-6 font-bold text-primary text-3xl">Mis Movimientos</h1>
+    <section className="mx-auto p-6 max-w-7xl">
+      <div className="mb-8">
+        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
+      </div>
+      
       {/* Filters */}
-      <div className="gap-4 grid grid-cols-1 md:grid-cols-4 mb-6">
-        <div>
-          <Label>Folio</Label>
-          <Input value={qFolio} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQFolio(e.target.value)} placeholder="Buscar por folio" />
-        </div>
+      <div className="bg-card mb-8 p-6 border rounded-lg">
+        <h2 className="mb-4 font-semibold text-lg">Filtros de búsqueda</h2>
+        <div className="gap-4 grid grid-cols-1 md:grid-cols-4">
+          <div className="space-y-2">
+            <Label>Folio</Label>
+            <Input value={qFolio} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQFolio(e.target.value)} placeholder="Buscar por folio" />
+          </div>
 
-        <div>
-          <Label>Estatus</Label>
-          <Select onValueChange={(v) => setStatusFilter(v)} defaultValue="all">
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="proceso">En proceso / Pending</SelectItem>
-              <SelectItem value="listo">Listo para recoger / Ready</SelectItem>
-              <SelectItem value="completado">Completado / Completed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          <div className="space-y-2">
+            <Label>Estatus</Label>
+            <Select onValueChange={(v) => setStatusFilter(v)} defaultValue="all">
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="proceso">En proceso / Pending</SelectItem>
+                <SelectItem value="listo">Listo para recoger / Ready</SelectItem>
+                <SelectItem value="completado">Completado / Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div>
-          <Label>Desde</Label>
-          <Input type="date" value={dateFrom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateFrom(e.target.value)} />
-        </div>
+          <div className="space-y-2">
+            <Label>Desde</Label>
+            <Input type="date" value={dateFrom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateFrom(e.target.value)} />
+          </div>
 
-        <div>
-          <Label>Hasta</Label>
-          <Input type="date" value={dateTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateTo(e.target.value)} />
+          <div className="space-y-2">
+            <Label>Hasta</Label>
+            <Input type="date" value={dateTo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDateTo(e.target.value)} />
+          </div>
         </div>
       </div>
 
       <div className="space-y-4">
-        {filtered.map((t) => {
-          // Mostrar QR cuando la transacción está en proceso o está reservada (antes 'pending')
-          const sLower = (t.status || '').toLowerCase();
-          const showQr = sLower.includes('proceso') || sLower.includes('pending') || sLower.includes('reserv');
-          const methodLabel = humanizeMethod(t.method);
+        {filtered.length === 0 ? (
+          <div className="bg-card p-12 border rounded-lg text-center">
+            <div className="mb-4 text-muted-foreground text-4xl">🔍</div>
+            <h3 className="mb-2 font-semibold text-lg">No se encontraron resultados</h3>
+            <p className="text-muted-foreground text-sm">Intenta ajustar los filtros de búsqueda</p>
+          </div>
+        ) : (
+          filtered.map((t) => {
+            const sLower = (t.status || '').toLowerCase();
+            const showQr = sLower.includes('proceso') || sLower.includes('pending') || sLower.includes('reserv');
 
-          // Determinar monedas y etiquetas según tipo de operación
-          const isBuying = t.type === 'buy';
-          const fromCurrency = isBuying ? 'MXN' : 'USD';
-          const toCurrency = isBuying ? 'USD' : 'MXN';
-          const fromLabel = isBuying ? 'Pagas' : 'Entregas';
-          const toLabel = 'Recibes';
-          const rateLabel = isBuying ? 'Tasa de Venta' : 'Tasa de Compra';
-
-          return (
-            <div key={t.id} className="bg-white shadow-md hover:shadow-lg p-5 border border-gray-200 rounded-xl transition-shadow">
-              {/* Header con tipo y fecha */}
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-2">
-                  <div>
-                    <div className="font-bold text-gray-900 text-2xl">
-                      {humanizeType(t.type)}
-                    </div>
-                    <div className="text-gray-500 text-xs">
-                      {new Date(t.createdAt).toLocaleDateString('es-MX', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <span className={`px-3 py-1 border rounded-full font-medium text-xs ${getStatusColor(t.status)}`}>
-                  {t.status}
-                </span>
-              </div>
-
-              {/* Montos principales */}
-              <div className="bg-gradient-to-r from-primary/5 to-secondary/5 mb-4 p-4 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="mb-1 text-gray-600 text-xs uppercase tracking-wide">{fromLabel}</div>
-                    <div className="font-bold text-secondary text-2xl">
-                      ${formatAmount(t.amountFrom)} {fromCurrency}
-                    </div>
-                  </div>
-
-                  <div className="text-gray-400 text-2xl">→</div>
-
-                  <div className="text-right">
-                    <div className="mb-1 text-gray-600 text-xs uppercase tracking-wide">{toLabel}</div>
-                    <div className="font-bold text-primary text-2xl">
-                      ${formatAmount(t.amountTo)} {toCurrency}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mostrar mensaje si ya fue pagado */}
-              {(sLower.includes('paid') || sLower.includes('pagado')) && (
-                <div className="bg-green-50 mb-4 p-4 border border-green-200 rounded-lg text-green-800 text-sm">
-                  {"Gracias por tu pago. Hemos enviado tu solicitud a la sucursal. Por favor, espera a que nuestro personal prepare tu dinero. El estado cambiará a \"Listo para Recoger\" cuando puedas pasar por él."}
-                </div>
-              )}
-
-              {/* Grid de detalles */}
-              <div className="gap-4 grid grid-cols-2 md:grid-cols-5 mb-4">
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="mb-1 text-gray-500 text-xs uppercase tracking-wide">Sucursal</div>
-                  <div className="font-medium text-gray-900 text-sm">{t.branch || 'N/D'}</div>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="mb-1 text-gray-500 text-xs uppercase tracking-wide">Método</div>
-                  <div className="flex items-center gap-2">
-                    <div className="font-medium text-gray-900 text-sm">{methodLabel}</div>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="mb-1 text-gray-500 text-xs uppercase tracking-wide">{rateLabel}</div>
-                  <div className="font-medium text-gray-900 text-sm">{Number(t.rate).toFixed(4)} MXN</div>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="mb-1 text-gray-500 text-xs uppercase tracking-wide">Comisión</div>
-                  <div className="font-medium text-gray-900 text-sm">{t.commissionPercent ? `${t.commissionPercent.toFixed(2)}% ($${t.commissionAmount?.toFixed(2)} MXN)` : '—'}</div>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="mb-1 text-gray-500 text-xs uppercase tracking-wide">Folio</div>
-                  <div className="font-mono font-medium text-gray-900 text-xs truncate">{t.id}</div>
-                </div>
-              </div>
-
-              {/* QR Code si está en proceso */}
-              {showQr && t.id && (
-                <div className="bg-slate-50 p-4 border border-slate-200 rounded-lg">
-                  <div className="flex sm:flex-row flex-col items-center gap-4">
-                    <Image
-                      className="shadow-sm border-2 border-slate-300 rounded-lg"
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(t.id)}`}
-                      alt={`QR ${t.id}`}
-                      width={120}
-                      height={120}
-                    />
-                    <div className="flex-1 sm:text-left text-center">
-                      <div className="mb-1 font-semibold text-slate-900">
-                        Presenta este código QR en sucursal
-                      </div>
-                      <div className="text-slate-700 text-sm">
-                        Escanea este código en la sucursal para completar tu transacción
-                      </div>
-                      <button
-                        onClick={() => downloadQR(t.id)}
-                        className="bg-primary hover:bg-primary/90 mt-4 px-4 py-2 rounded-md font-medium text-white text-sm"
-                      >
-                        Descargar QR
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Botón Ver más */}
-              <div className="mt-4 text-center">
-                <Link href={`/operacion/confirm?txId=${t.id}`}>
-                  <button className="bg-primary hover:bg-primary/90 px-4 py-2 rounded-md font-medium text-white text-sm">
-                    Ver más
-                  </button>
-                </Link>
-              </div>
-            </div>
-          );
-        })}
+            return (
+              <TransactionCard
+                key={t.id}
+                id={t.id}
+                type={t.type}
+                amountFrom={t.amountFrom}
+                amountTo={t.amountTo}
+                rate={t.rate}
+                commissionPercent={t.commissionPercent}
+                commissionAmount={t.commissionAmount}
+                method={t.method}
+                branch={t.branch}
+                status={t.status}
+                createdAt={t.createdAt}
+                showQR={showQr}
+                onDownloadQR={downloadQR}
+              />
+            );
+          })
+        )}
       </div>
     </section>
   );

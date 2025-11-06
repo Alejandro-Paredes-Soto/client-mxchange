@@ -100,12 +100,12 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   const handleOpenNotifications = async (open: boolean) => {
+    console.log('[handleOpenNotifications] open:', open);
     if (open) {
-      // Marcar como leídas INMEDIATAMENTE para que el contador desaparezca
+      // Marcar como leídas inmediatamente cuando se abre el panel
+      console.log('[handleOpenNotifications] Llamando a markAllAsRead...');
       await markAllAsRead();
-      console.log('[ADMIN] Abriendo notificaciones, recargando...');
-      // Luego recargar las notificaciones del servidor
-      await reloadFromServer();
+      console.log('[handleOpenNotifications] markAllAsRead completado');
     }
     setNotifOpen(open);
   };
@@ -172,7 +172,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
               className="relative hover:bg-gray-100 p-2 rounded-md"
               title="Notificaciones"
               type="button"
-              onClick={() => setNotifOpen(true)}
+              onClick={() => handleOpenNotifications(true)}
             >
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (

@@ -117,20 +117,45 @@ const createTransaction = async (req, res, next) => {
       [branch_id, currencyToVerify]
     );
 
-    const availableAmount = inventoryRows[0]?.amount;
+    const totalInventoryAmount = inventoryRows[0]?.amount;
 
-    // amountToVerify in payload may be tampered; use serverAmountTo which is what
-    // the branch actually needs to pay out.
-    if (!availableAmount || availableAmount < serverAmountTo) {
+    if (!totalInventoryAmount) {
       await connection.rollback();
-      return res.status(409).json({ // 409 Conflict is a good status code here
-        message: `Lo sentimos. La sucursal seleccionada no cuenta con fondos suficientes (${currencyToVerify}) para esta operación. Por favor, intenta un monto menor o selecciona una sucursal diferente.`
+      return res.status(409).json({
+        message: `Lo sentimos. La sucursal seleccionada no tiene inventario configurado para ${currencyToVerify}.`
       });
     }
 
-  // 5. Update inventory: decrease what branch pays (reserve funds).
-  // No sumar aún lo que la sucursal recibirá: eso se debe hacer al confirmar
-  // la transacción. Calcularemos la comisión en MXN como la diferencia entre
+    // 4.b Calcular cuánto está actualmente reservado (pero no comprometido aún)
+    // Esto evita sobreventa: si alguien ya reservó dinero, no podemos reservarlo de nuevo
+    const [reservedRows] = await connection.query(
+      `SELECT COALESCE(SUM(amount_reserved), 0) as total_reserved 
+       FROM inventory_reservations 
+       WHERE branch_id = ? AND currency = ? AND status = 'reserved'`,
+      [branch_id, currencyToVerify]
+    );
+
+    const totalReservedAmount = reservedRows && reservedRows[0] ? Number(reservedRows[0].total_reserved) : 0;
+    const actuallyAvailableAmount = totalInventoryAmount - totalReservedAmount;
+
+    console.log(`[INVENTORY CHECK] Sucursal ${branch_id}, ${currencyToVerify}:`, {
+      total: totalInventoryAmount,
+      reserved: totalReservedAmount,
+      available: actuallyAvailableAmount,
+      requested: serverAmountTo
+    });
+
+    // amountToVerify in payload may be tampered; use serverAmountTo which is what
+    // the branch actually needs to pay out.
+    if (actuallyAvailableAmount < serverAmountTo) {
+      await connection.rollback();
+      return res.status(409).json({ // 409 Conflict is a good status code here
+        message: `Lo sentimos. La sucursal seleccionada no cuenta con fondos suficientes (${currencyToVerify}) para esta operación. Disponible: $${actuallyAvailableAmount.toFixed(2)}, Solicitado: $${serverAmountTo.toFixed(2)}. Por favor, intenta un monto menor o selecciona una sucursal diferente.`
+      });
+    }
+
+  // 5. Calculate commission for the transaction.
+  // Calcularemos la comisión en MXN como la diferencia entre
   // el monto cobrado y lo que correspondería al valor según la tasa base.
     let commissionAmount = 0;
     try {
@@ -147,20 +172,10 @@ const createTransaction = async (req, res, next) => {
       commissionAmount = 0;
     }
 
-    // Ajustes de inventario:
-    // - La sucursal entrega amountToVerify en currencyToVerify (se descuenta)
-    // - La sucursal recibe amountToReceive en currencyToReceive (se suma)
-    // NOTA: la comisión ya está integrada en la tasa enviada por el frontend, así que
-    // no la restamos de lo que la sucursal recibe. La comisión se registra en la transacción.
-    // Only decrease the inventory for the currency the branch will pay out
-    await connection.query(
-      'UPDATE inventory SET amount = amount - ? WHERE branch_id = ? AND currency = ?',
-      [serverAmountTo, branch_id, currencyToVerify]
-    );
-    // NOTE: do NOT increase the receiving currency here. The increase should
-    // happen when the transaction is confirmed (so the branch actually
-    // receives the funds). This prevents artificially inflating available
-    // inventory during the reserved state.
+    // IMPORTANTE: NO se descuenta el inventario aquí.
+    // Solo se crea la reserva en inventory_reservations.
+    // El descuento y acreditación real se harán cuando se confirme el pago.
+    // Esto evita el doble descuento y mantiene el inventario consistente.
 
     // 6. Create the transaction record
     const code = generateTransactionCode();
@@ -324,7 +339,7 @@ const listUserTransactions = async (req, res, next) => {
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
     const [rows] = await pool.query(
-      `SELECT t.*, b.name as branch FROM transactions t LEFT JOIN branches b ON t.branch_id = b.id WHERE t.user_id = ? ORDER BY t.created_at DESC LIMIT 100`,
+      `SELECT t.*, b.name as branch, b.address as branch_address, b.city as branch_city, b.state as branch_state FROM transactions t LEFT JOIN branches b ON t.branch_id = b.id WHERE t.user_id = ? ORDER BY t.created_at DESC LIMIT 100`,
       [userId]
     );
     return res.json({ transactions: rows });

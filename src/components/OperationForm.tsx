@@ -7,6 +7,7 @@ import { debounce } from 'lodash';
 import { useSocket } from '@/providers/SocketProvider';
 import { toast } from 'sonner';
 import { NumberInput } from "./ui/number-input";
+import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 
 type OperationType = 'buy' | 'sell'; // Represents the user's goal: buying or selling USD.
 
@@ -376,7 +377,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         <h3 className="font-semibold text-primary text-lg">Generar Orden</h3>
         <div className="flex sm:flex-row flex-col items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <button
-            className={`w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-gradient-primary-to-accent text-white' : 'bg-white text-primary border border-light-green'}`}
+            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-gradient-primary-to-accent text-white' : 'bg-white text-primary border border-light-green'}`}
             onClick={() => {
               setOperationType('buy');
               setFromCurrency('MXN');
@@ -389,7 +390,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
             Quiero Comprar Dólares
           </button>
           <button
-            className={`w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-gradient-primary-to-accent text-white' : 'bg-white text-primary border border-light-green'}`}
+            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-gradient-primary-to-accent text-white' : 'bg-white text-primary border border-light-green'}`}
             onClick={() => {
               setOperationType('sell');
               setFromCurrency('USD');
@@ -522,7 +523,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         <div className="gap-3 grid grid-cols-1 sm:grid-cols-2">
           <div>
             <label htmlFor="branch" className="block mb-2 font-medium text-primary">Sucursal:</label>
-            <select id="branch" value={branchId} onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg" disabled={isLoading}>
+            <select id="branch" value={branchId} onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" disabled={isLoading}>
               {branches.length > 0 ? (
                 branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)
               ) : (
@@ -535,7 +536,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
           {operationType === 'buy' && (
             <div>
               <label htmlFor="method" className="block mb-2 font-medium text-primary">Método de Pago:</label>
-              <select id="method" value={method} onChange={(e) => setMethod(e.target.value)} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg" disabled={isLoading}>
+              <select id="method" value={method} onChange={(e) => setMethod(e.target.value)} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" disabled={isLoading}>
                 <option>En sucursal</option>
                 <option>Transferencia bancaria / Tarjeta de cto/dto</option>
               </select>
@@ -545,16 +546,16 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
         {/* Error Display */}
         {error && (
-          <div className="bg-red-100 p-4 border-red-500 border-l-4 rounded-md text-red-700" role="alert">
-            <p className="font-bold">Error en la operación</p>
-            <p>{error}</p>
-          </div>
+          <Alert variant="destructive" className="mt-2">
+            <AlertTitle>Error en la operación</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {/* Action Button */}
         <div className="mt-2">
           <button
-            className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent disabled:opacity-50 px-4 py-3 rounded-lg w-full font-medium text-white transition-all hover:-translate-y-1 disabled:cursor-not-allowed"
+            className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent disabled:opacity-50 px-4 py-3 rounded-lg w-full font-medium text-white transition-all hover:-translate-y-1 cursor-pointer disabled:cursor-not-allowed"
             onClick={onReserve}
             disabled={isLoading}
           >

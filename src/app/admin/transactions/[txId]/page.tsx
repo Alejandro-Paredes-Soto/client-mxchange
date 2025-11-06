@@ -136,10 +136,41 @@ export default function AdminTransactionDetail() {
     }
   };
 
-  if (!txId) return <div className="p-6">Falta el código de transacción.</div>;
-  if (loading) return <div className="p-6">Cargando...</div>;
-  if (error) return <div className="p-6 text-red-600">Error: {error}</div>;
-  if (!tx) return <div className="p-6">No se encontró la transacción.</div>;
+  if (!txId) return (
+    <div className="mx-auto p-6 max-w-5xl">
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground">Falta el código de transacción.</p>
+      </Card>
+    </div>
+  );
+  
+  if (loading) return (
+    <div className="mx-auto p-6 max-w-5xl">
+      <Card className="p-8 text-center">
+        <div className="space-y-4 animate-pulse">
+          <div className="bg-muted mx-auto rounded w-1/4 h-4"></div>
+          <div className="bg-muted mx-auto rounded w-1/2 h-4"></div>
+        </div>
+        <p className="mt-4 text-muted-foreground">Cargando transacción...</p>
+      </Card>
+    </div>
+  );
+  
+  if (error) return (
+    <div className="mx-auto p-6 max-w-5xl">
+      <Card className="bg-destructive/10 p-8 border-destructive/20">
+        <p className="font-medium text-destructive">Error: {error}</p>
+      </Card>
+    </div>
+  );
+  
+  if (!tx) return (
+    <div className="mx-auto p-6 max-w-5xl">
+      <Card className="p-8 text-center">
+        <p className="text-muted-foreground">No se encontró la transacción.</p>
+      </Card>
+    </div>
+  );
 
   const amountFrom = Number(getValue('amount_from') ?? getValue('amountFrom') ?? tx.amount_from ?? tx.amountFrom ?? 0);
   const amountTo = Number(getValue('amount_to') ?? getValue('amountTo') ?? tx.amount_to ?? tx.amountTo ?? 0);
@@ -147,7 +178,7 @@ export default function AdminTransactionDetail() {
   const commissionAmount = getValue('commission_amount') ?? getValue('commissionAmount') ?? tx.commission_amount ?? tx.commissionAmount;
   const commissionPercent = tx.commission_percent ?? tx.commissionPercent;
   const method = String(getValue('method') ?? tx.method ?? '-');
-  const branch = String(getValue('branch') ?? (tx.branch_id ? `Sucursal ${tx.branch_id}` : tx.branch) ?? '-');
+  const branch = String(getValue('branch_name') ?? getValue('branchName') ?? tx.branch_name ?? tx.branchName ?? (tx.branch_id ? `Sucursal ${tx.branch_id}` : '-'));
   const rawStatus = String(getValue('status') ?? tx.status ?? '-');
   const humanStatus = String(humanizeStatus(rawStatus || String(rawStatus)));
 
@@ -156,213 +187,281 @@ export default function AdminTransactionDetail() {
   const currencyFrom = String(getValue('currency_from') ?? getValue('currencyFrom') ?? tx.currency_from ?? tx.currencyFrom ?? 'MXN');
   const currencyTo = String(getValue('currency_to') ?? getValue('currencyTo') ?? tx.currency_to ?? tx.currencyTo ?? 'USD');
 
-  return (
-    <section className="space-y-6 mx-auto p-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex sm:flex-row flex-col justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-4">
-            <h1 className="font-bold text-3xl tracking-tight">Transacción</h1>
-            {/* Tipo de operación grande y visible */}
-            <span
-              aria-label={`Tipo de operación: ${txType === 'buy' ? 'Compra' : txType === 'sell' ? 'Venta' : txType}`}
-              className={`inline-flex items-center px-4 py-2 rounded-full text-white font-semibold text-lg uppercase select-none ${isBuying ? 'bg-emerald-600' : 'bg-rose-600'}`}
-            >
-              {txType === 'buy' ? 'COMPRA' : txType === 'sell' ? 'VENTA' : (txType || '-').toString().toUpperCase()}
-            </span>
-          </div>
+  // Determinar si el pago es con tarjeta
+  const isPaidWithCard = method.toLowerCase().includes('card') || method.toLowerCase().includes('tarjeta') || method.toLowerCase().includes('stripe');
+  // Determinar si ya está pagado (para pagos con tarjeta)
+  const isPaid = rawStatus.toLowerCase() === 'paid';
+  // Si pagó con tarjeta y ya está paid, o si es pago en sucursal
+  const showPaymentCompleted = isPaidWithCard && (isPaid || rawStatus.toLowerCase() === 'ready_for_pickup' || rawStatus.toLowerCase() === 'completed');
 
-          <p className="flex items-center gap-2 mt-2 text-muted-foreground">
-            <Hash className="w-4 h-4" />
-            <span className="font-mono">{txId}</span>
-          </p>
+  return (
+    <section className="mx-auto p-6">
+      {/* Header compacto */}
+      <div className="mb-6">
+        <div className="flex sm:flex-row flex-col justify-between items-start gap-3 mb-3">
+          <div className="flex-1">
+            <h1 className="mb-2 font-bold text-3xl tracking-tight">Detalle de Transacción</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <Hash className="w-4 h-4" />
+                <span className="font-mono">{txId}</span>
+              </div>
+              <Badge 
+                variant={txType === 'buy' ? 'default' : 'secondary'}
+                className="px-3 py-1"
+              >
+                {txType === 'buy' ? 'COMPRA' : txType === 'sell' ? 'VENTA' : txType.toUpperCase()}
+              </Badge>
+            </div>
+          </div>
+          <Badge className={`${getStatusColor(rawStatus)} px-4 py-2`} variant="outline">
+            {humanStatus || rawStatus}
+          </Badge>
         </div>
-        <div className={`px-4 py-2 rounded-lg border ${getStatusColor(rawStatus)}`}>
-          <div className="font-semibold">{humanStatus || rawStatus}</div>
+        
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Calendar className="w-4 h-4" />
+          <span>
+            {formatPrettyDate(getValue('created_at') ?? getValue('createdAt') ?? getValue('created') ?? tx.created_at ?? tx.createdAt)}
+          </span>
         </div>
       </div>
 
-      {/* Main Exchange Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Operación de Cambio</CardTitle>
-          <CardDescription className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            {formatPrettyDate(getValue('created_at') ?? getValue('createdAt') ?? getValue('created') ?? tx.created_at ?? tx.createdAt)}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex sm:flex-row flex-col justify-between items-center gap-8 py-4">
-            <div className="sm:text-left text-center">
-              <p className="mb-2 text-muted-foreground text-sm">
-                {isBuying ? 'Cliente paga' : 'Cliente recibe'}
-              </p>
-              <p className="font-bold text-4xl">
-                ${amountFrom.toFixed(2)}
-              </p>
-              <p className="mt-1 text-muted-foreground text-lg">{currencyFrom}</p>
-            </div>
-
-            <ArrowRight className="w-8 h-8 text-muted-foreground" />
-
-            <div className="text-center sm:text-right">
-              <p className="mb-2 text-muted-foreground text-sm">
-                {isBuying ? 'Cliente recibe' : 'Cliente paga'}
-              </p>
-              <p className="font-bold text-4xl">
-                ${amountTo.toFixed(2)}
-              </p>
-              <p className="mt-1 text-muted-foreground text-lg">{currencyTo}</p>
-            </div>
-          </div>
-
-          <Separator className="my-6" />
-
-          {/* Action Summary */}
-          <div className="space-y-4 bg-muted/50 p-6 rounded-lg">
-            <div>
-              <h3 className="mb-2 font-semibold text-lg">Instrucciones de operación</h3>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex flex-shrink-0 justify-center items-center bg-primary rounded-full w-8 h-8 font-semibold text-primary-foreground">
-                    1
+      {/* Grid principal - 2 columnas */}
+      <div className="gap-6 grid grid-cols-1 lg:grid-cols-2">
+        {/* Columna Izquierda */}
+        <div className="space-y-6">
+          {/* Montos principales */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Operación de Cambio</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-muted/50 p-6 rounded-lg">
+                {showPaymentCompleted ? (
+                  // Si ya pagó con tarjeta, solo mostrar lo que se le entrega
+                  <div className="text-center">
+                    <p className="mb-2 font-medium text-muted-foreground text-xs uppercase">
+                      {isBuying ? 'Cliente recibe' : 'Cliente recibe'}
+                    </p>
+                    <p className="mb-1 font-bold text-4xl">
+                      ${(isBuying ? amountTo : amountTo).toFixed(2)}
+                    </p>
+                    <p className="font-semibold text-muted-foreground">{isBuying ? currencyTo : currencyTo}</p>
+                    <div className="space-y-2 mt-4 pt-4 border-t">
+                      <p className="font-medium text-green-600 dark:text-green-400 text-sm">
+                        ✓ Pago con tarjeta completado
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        Pagó: ${amountFrom.toFixed(2)} {currencyFrom}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">
-                      {isBuying ? 'Recibir del cliente' : 'Dar al cliente'}
-                    </p>
-                    <p className="font-bold text-2xl">
-                      ${isBuying ? amountFrom.toFixed(2) : amountTo.toFixed(2)} {isBuying ? currencyFrom : currencyTo}
-                    </p>
+                ) : (
+                  // Mostrar flujo normal para pagos en sucursal o antes de pagar
+                  <div className="flex justify-between items-center gap-4">
+                    <div className="flex-1 text-center">
+                      <p className="mb-2 font-medium text-muted-foreground text-xs uppercase">
+                        {isBuying ? 'Cliente paga' : 'Cliente entrega'}
+                      </p>
+                      <p className="mb-1 font-bold text-3xl">
+                        ${amountFrom.toFixed(2)}
+                      </p>
+                      <p className="font-semibold text-muted-foreground text-sm">{currencyFrom}</p>
+                    </div>
+
+                    <ArrowRight className="flex-shrink-0 w-6 h-6 text-muted-foreground" />
+
+                    <div className="flex-1 text-center">
+                      <p className="mb-2 font-medium text-muted-foreground text-xs uppercase">
+                        {isBuying ? 'Cliente recibe' : 'Cliente recibe'}
+                      </p>
+                      <p className="mb-1 font-bold text-3xl">
+                        ${amountTo.toFixed(2)}
+                      </p>
+                      <p className="font-semibold text-muted-foreground text-sm">{currencyTo}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Detalles Financieros y Operativos en grid */}
+          <div className="gap-4 grid grid-cols-2">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Detalles Financieros</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 font-medium text-muted-foreground text-xs uppercase">
+                    <TrendingUp className="w-3 h-3" />
+                    Tasa
+                  </div>
+                  <div className="font-bold text-lg">
+                    {isNaN(rate) ? '-' : `$${rate.toFixed(4)}`}
                   </div>
                 </div>
                 
-                <div className="flex items-start gap-3">
-                  <div className="flex flex-shrink-0 justify-center items-center bg-primary rounded-full w-8 h-8 font-semibold text-primary-foreground">
-                    2
+                <Separator />
+                
+                <div className="space-y-1">
+                  <div className="font-medium text-muted-foreground text-xs uppercase">
+                    Comisión
                   </div>
-                  <div>
-                    <p className="font-medium">
-                      {isBuying ? 'Entregar al cliente' : 'Recibir del cliente'}
-                    </p>
-                    <p className="font-bold text-2xl">
-                      ${isBuying ? amountTo.toFixed(2) : amountFrom.toFixed(2)} {isBuying ? currencyTo : currencyFrom}
-                    </p>
+                  <div className="font-semibold text-sm">
+                    {commissionPercent 
+                      ? `${Number(commissionPercent).toFixed(2)}%` 
+                      : '—'}
                   </div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Info. Operativa</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 font-medium text-muted-foreground text-xs uppercase">
+                    <Building2 className="w-3 h-3" />
+                    Sucursal
+                  </div>
+                  <div className="font-semibold text-sm">{branch}</div>
+                </div>
+                
+                <Separator />
+                
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 font-medium text-muted-foreground text-xs uppercase">
+                    <CreditCard className="w-3 h-3" />
+                    Método
+                  </div>
+                  <div className="font-semibold text-sm">{method}</div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Acciones según estatus/tipo */}
-      <div className="flex flex-wrap gap-3">
-        {(() => {
-          const s = rawStatus.toLowerCase();
-          const actions: { label: string; status: string; variant?: 'default' | 'destructive' | 'secondary' }[] = [];
-          if (isBuying) {
-            if (s === 'reserved') {
-              // Cliente compra y paga en sucursal - marcar dinero listo
-              actions.push({ label: 'Dinero Preparado y Listo', status: 'ready_for_pickup' });
-              actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
-            } else if (s === 'paid') {
-              // Cliente compra y paga en línea - preparar para recoger
-              actions.push({ label: 'Dinero Preparado y Listo', status: 'ready_for_pickup' });
-              actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
-            } else if (s === 'ready_for_pickup') {
-              actions.push({ label: 'Completar Orden', status: 'completed' });
-              actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
-            }
-          } else if (txType === 'sell') {
-            if (s === 'reserved') {
-              actions.push({ label: 'Dinero Preparado y Listo', status: 'ready_to_receive' });
-              actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
-            } else if (s === 'ready_to_receive') {
-              actions.push({ label: 'Completar Orden', status: 'completed' });
-              actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
-            }
-          }
-          if (!actions.length) return null;
-          return actions.map((a) => (
-            <Button key={a.label} variant={a.variant || 'default'} disabled={updating} onClick={() => performAction(a.status)}>
-              {updating ? 'Procesando...' : a.label}
-            </Button>
-          ));
-        })()}
-      </div>
-
-      {/* Details Grid */}
-      <div className="gap-6 grid md:grid-cols-2">
-        {/* Transaction Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Detalles de la transacción</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground text-sm">Tipo de operación</span>
-                <Badge
-                  variant={txType === 'buy' ? 'default' : 'secondary'}
-                  className="px-3 py-1 font-semibold text-sm uppercase"
-                >
-                  {txType === 'buy' ? 'Compra' : txType === 'sell' ? 'Venta' : txType}
-                </Badge>
-            </div>
-            
-            <Separator />
-            
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-muted-foreground text-sm">
-                <TrendingUp className="w-4 h-4" />
-                Tasa de cambio
-              </span>
-              <span className="font-semibold">{isNaN(rate) ? '-' : `$${rate.toFixed(4)}`}</span>
-            </div>
-            
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground text-sm">Comisión</span>
-              <span className="font-semibold">
-                {commissionPercent 
-                  ? `${Number(commissionPercent).toFixed(2)}% ($${Number(commissionAmount || 0).toFixed(2)})` 
-                  : (commissionAmount ? `$${Number(commissionAmount).toFixed(2)}` : '—')}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Operational Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Información operativa</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Building2 className="w-4 h-4" />
-                Sucursal
-              </span>
-              <span className="font-semibold">{branch}</span>
-            </div>
-            
-            <Separator />
-            
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-muted-foreground text-sm">
-                <CreditCard className="w-4 h-4" />
-                Método de pago
-              </span>
-              <span className="font-semibold">{method}</span>
-            </div>
-            
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground text-sm">Estado actual</span>
-              <div className={`px-3 py-1 rounded-md border ${getStatusColor(rawStatus)}`}>
-                <div className="font-semibold text-sm">{humanStatus || rawStatus}</div>
+        {/* Columna Derecha */}
+        <div className="space-y-6">
+          {/* Instrucciones y Acciones juntas */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Instrucciones y Acciones</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Instrucciones */}
+              <div className="space-y-3">
+                {showPaymentCompleted ? (
+                  // Si ya pagó con tarjeta, solo mostrar instrucción de entrega
+                  <div className="flex items-start gap-3 bg-muted/50 p-3 border rounded-lg">
+                    <div className="flex flex-shrink-0 justify-center items-center bg-primary rounded-full w-8 h-8 font-bold text-primary-foreground text-sm">
+                      ✓
+                    </div>
+                    <div className="flex-1">
+                      <p className="mb-1 font-semibold text-muted-foreground text-xs">
+                        {isBuying ? 'Entregar al cliente' : 'Recibir del cliente'}
+                      </p>
+                      <p className="font-bold text-xl">
+                        ${isBuying ? amountTo.toFixed(2) : amountFrom.toFixed(2)} {isBuying ? currencyTo : currencyFrom}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  // Instrucciones normales para pago en sucursal
+                  <>
+                    <div className="flex items-start gap-3 bg-muted/50 p-3 border rounded-lg">
+                      <div className="flex flex-shrink-0 justify-center items-center bg-primary rounded-full w-8 h-8 font-bold text-primary-foreground text-sm">
+                        1
+                      </div>
+                      <div className="flex-1">
+                        <p className="mb-1 font-semibold text-muted-foreground text-xs">
+                          {isBuying ? 'Recibir del cliente' : 'Dar al cliente'}
+                        </p>
+                        <p className="font-bold text-xl">
+                          ${isBuying ? amountFrom.toFixed(2) : amountTo.toFixed(2)} {isBuying ? currencyFrom : currencyTo}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3 bg-muted/50 p-3 border rounded-lg">
+                      <div className="flex flex-shrink-0 justify-center items-center bg-primary rounded-full w-8 h-8 font-bold text-primary-foreground text-sm">
+                        2
+                      </div>
+                      <div className="flex-1">
+                        <p className="mb-1 font-semibold text-muted-foreground text-xs">
+                          {isBuying ? 'Entregar al cliente' : 'Recibir del cliente'}
+                        </p>
+                        <p className="font-bold text-xl">
+                          ${isBuying ? amountTo.toFixed(2) : amountFrom.toFixed(2)} {isBuying ? currencyTo : currencyFrom}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              <Separator />
+
+              {/* Acciones */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-sm">Acciones Disponibles</h4>
+                <div className="flex flex-col gap-2">
+                  {(() => {
+                    const s = rawStatus.toLowerCase();
+                    const actions: { label: string; status: string; variant?: 'default' | 'destructive' | 'secondary' }[] = [];
+                    
+                    if (isBuying) {
+                      if (s === 'reserved') {
+                        // Si es pago con tarjeta y está en 'reserved', no permitir marcar como listo
+                        if (isPaidWithCard) {
+                          return <p className="text-muted-foreground text-sm">Esperando pago del cliente con tarjeta...</p>;
+                        } else {
+                          // Pago en sucursal
+                          actions.push({ label: 'Marcar Dinero Listo', status: 'ready_for_pickup' });
+                          actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
+                        }
+                      } else if (s === 'paid') {
+                        // Cliente ya pagó con tarjeta, ahora sí se puede marcar como listo
+                        actions.push({ label: 'Marcar Dinero Listo', status: 'ready_for_pickup' });
+                        actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
+                      } else if (s === 'ready_for_pickup') {
+                        actions.push({ label: 'Completar Orden', status: 'completed' });
+                        actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
+                      }
+                    } else if (txType === 'sell') {
+                      if (s === 'reserved') {
+                        actions.push({ label: 'Marcar Dinero Listo', status: 'ready_to_receive' });
+                        actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
+                      } else if (s === 'ready_to_receive') {
+                        actions.push({ label: 'Completar Orden', status: 'completed' });
+                        actions.push({ label: 'Cancelar Orden', status: 'cancelled', variant: 'destructive' });
+                      }
+                    }
+                    
+                    if (!actions.length) return <p className="text-muted-foreground text-sm">No hay acciones disponibles.</p>;
+                    
+                    return actions.map((a) => (
+                      <Button 
+                        key={a.label} 
+                        variant={a.variant || 'default'} 
+                        disabled={updating} 
+                        onClick={() => performAction(a.status)}
+                        className="w-full"
+                      >
+                        {updating ? 'Procesando...' : a.label}
+                      </Button>
+                    ));
+                  })()}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </section>
   );

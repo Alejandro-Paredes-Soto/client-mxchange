@@ -1,18 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const paymentsController = require('../controllers/paymentsController');
+const stripePaymentsController = require('../controllers/stripePaymentsController');
 const { authenticate } = require('../middlewares/auth');
 
-// Crear cargo con tarjeta (requiere autenticación del usuario en el flujo típico)
-router.post('/card', authenticate, paymentsController.createCardCharge);
+// === STRIPE ENDPOINTS ===
+// Obtener configuración de Stripe (clave pública)
+router.get('/stripe/config', stripePaymentsController.getConfig);
 
-// Obtener configuración de pagos (p. ej. clave pública de Conekta)
-router.get('/config', paymentsController.getConfig);
+// Crear Payment Intent
+router.post('/stripe/create-payment-intent', authenticate, stripePaymentsController.createPaymentIntent);
 
-// Estado de pago público por transaction_code (p. ej. para vistas success/failed)
+// Confirmar pago
+router.post('/stripe/confirm-payment', authenticate, stripePaymentsController.confirmPayment);
+
+// Procesar cargo completo con tarjeta
+router.post('/stripe/charge', authenticate, stripePaymentsController.charge);
+
+// Webhook de Stripe (debe usar express.raw para verificación de firma)
+router.post('/stripe/webhook', express.raw({ type: 'application/json' }), stripePaymentsController.webhook);
+
+// === SHARED ENDPOINTS ===
+// Estado de pago público por transaction_code (para vistas success/failed)
 router.get('/status/:transaction_code', paymentsController.getPaymentStatus);
-
-// Webhook (public) — Conekta enviará eventos a este endpoint
-router.post('/webhook', express.json({ type: '*/*' }), paymentsController.webhook);
 
 module.exports = router;

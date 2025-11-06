@@ -71,6 +71,9 @@ export type Transaction = {
     rate: number;
     method?: string;
     branch?: string;
+    branchAddress?: string;
+    branchCity?: string;
+    branchState?: string;
     status: 'En proceso' | 'Listo para recoger' | 'Completado';
     commissionPercent?: number;
     commissionAmount?: number;
@@ -89,6 +92,9 @@ export type BackendTransaction = {
     method?: string;
     branch_id?: number;
     branch?: string;
+    branch_address?: string;
+    branch_city?: string;
+    branch_state?: string;
     status?: string;
     created_at?: string;
     user_name?: string;
@@ -511,5 +517,67 @@ export async function getTransactionDetails(id: number, token?: string): Promise
     } catch (e) {
         console.error('getTransactionDetails error', e);
         return { transaction: {} as AdminTransaction };
+    }
+}
+
+// ==================== STRIPE HELPERS (FRONTEND) ====================
+export type StripeConfig = { publicKey: string | null; provider: 'stripe' };
+
+export async function getStripeConfig(): Promise<StripeConfig | null> {
+    if (!API_BASE) return null;
+    try {
+        const res = await fetch(`${API_BASE}/payments/stripe/config`, { cache: 'no-store' });
+        if (!res.ok) return null;
+        return res.json();
+    } catch (e) {
+        console.error('getStripeConfig error', e);
+        return null;
+    }
+}
+
+export async function stripeCharge(payload: {
+    amount: number;
+    currency?: string;
+    description?: string;
+    transaction_code: string;
+    customer: { name: string; email: string };
+    payment_method_id: string;
+}, token?: string) {
+    if (!API_BASE) return { error: 'no-api' } as const;
+    try {
+        const res = await fetch(`${API_BASE}/payments/stripe/charge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) return { error: data } as const;
+        return data;
+    } catch (e) {
+        console.error('stripeCharge error', e);
+        return { error: e } as const;
+    }
+}
+
+export async function createStripePaymentIntent(payload: {
+    amount: number;
+    currency?: string;
+    description?: string;
+    transaction_code?: string;
+    customer: { name: string; email: string };
+}, token?: string) {
+    if (!API_BASE) return { error: 'no-api' } as const;
+    try {
+        const res = await fetch(`${API_BASE}/payments/stripe/create-payment-intent`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) return { error: data } as const;
+        return data;
+    } catch (e) {
+        console.error('createStripePaymentIntent error', e);
+        return { error: e } as const;
     }
 }

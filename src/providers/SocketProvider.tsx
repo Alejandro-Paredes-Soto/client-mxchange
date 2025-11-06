@@ -261,19 +261,45 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   
   const markAllAsRead = useCallback(async () => {
     try {
+      console.log('[markAllAsRead] Iniciando...');
       const token = Cookies.get('token') || '';
-      await fetch(`${API_BASE}/notifications/mark-read`, {
+      
+      if (!token) {
+        console.error('[markAllAsRead] No hay token disponible');
+        return;
+      }
+      
+      // Primero actualizar el estado local inmediatamente para feedback instantáneo
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      console.log('[markAllAsRead] Estado local actualizado');
+      
+      // Luego hacer la petición al servidor
+      console.log('[markAllAsRead] Llamando a API:', `${API_BASE}/notifications/mark-read`);
+      const response = await fetch(`${API_BASE}/notifications/mark-read`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
       });
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      
+      console.log('[markAllAsRead] Respuesta del servidor:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[markAllAsRead] Error del servidor:', response.status, errorText);
+        // Si falla, revertir el estado local recargando del servidor
+        await reloadFromServer();
+      } else {
+        const data = await response.json();
+        console.log('[markAllAsRead] Éxito:', data);
+      }
     } catch (e) {
-      console.error('Error marcando notificaciones como leídas:', e);
+      console.error('[markAllAsRead] Error:', e);
+      // Si hay error, recargar del servidor para mantener sincronía
+      await reloadFromServer();
     }
-  }, [API_BASE]);
+  }, [API_BASE, reloadFromServer]);
 
   const contextValue = useMemo<SocketContextValue>(
     () => ({ notifications, unreadCount, markAllAsRead, reloadFromServer }), 

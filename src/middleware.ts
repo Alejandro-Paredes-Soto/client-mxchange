@@ -5,10 +5,41 @@ const jwtSecret = new TextEncoder().encode(secretString);
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+    const token = request.cookies.get('token')?.value;
 
+    // Verificar si el usuario está autenticado
+    let isAuthenticated = false;
+    let userRole: string | undefined;
+
+    if (token) {
+        try {
+            const { payload } = await jwtVerify(token, jwtSecret, {
+                algorithms: ['HS256']
+            });
+            isAuthenticated = true;
+            userRole = (payload as { role?: string }).role;
+        } catch (err) {
+            // Token inválido o expirado
+            isAuthenticated = false;
+        }
+    }
+
+    // Redirigir usuarios autenticados que intentan acceder a rutas de auth
+    const authRoutes = ['/login', '/register', '/forgotpassword'];
+    const isAuthRoute = authRoutes.some(route => pathname.startsWith(route));
+
+    if (isAuthenticated && isAuthRoute) {
+        // Redirigir según el rol del usuario
+        if (userRole === 'admin' || userRole === 'sucursal') {
+            return NextResponse.redirect(new URL('/admin', request.url));
+        } else {
+            // Cliente u otro rol
+            return NextResponse.redirect(new URL('/inicio', request.url));
+        }
+    }
+
+    // Proteger rutas de admin
     if (pathname.startsWith('/admin')) {
-        const token = request.cookies.get('token')?.value;
-
         if (!token) {
             return NextResponse.redirect(new URL('/login', request.url));
         }
@@ -33,10 +64,10 @@ export async function middleware(request: NextRequest) {
 
             console.log('[middleware] JWT verified successfully');
 
-            const userRole = (payload as { role?: string }).role;
+            const role = (payload as { role?: string }).role;
 
             // Permitir acceso tanto a admin como a sucursal
-            if (userRole !== 'admin' && userRole !== 'sucursal') {
+            if (role !== 'admin' && role !== 'sucursal') {
                 return NextResponse.redirect(new URL('/inicio', request.url));
             }
 
@@ -51,5 +82,11 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/admin', '/admin/:path*'],
+    matcher: [
+        '/admin',
+        '/admin/:path*',
+        '/login',
+        '/register',
+        '/forgotpassword',
+    ],
 };

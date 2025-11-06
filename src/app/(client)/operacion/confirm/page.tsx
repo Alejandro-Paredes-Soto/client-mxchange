@@ -12,6 +12,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { getSocket } from '@/lib/socket';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 // types for TSX loosened (file is .tsx but project may not strictly type everything)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
@@ -24,100 +25,54 @@ const humanizeMethod = (m?: string) => {
   return m;
 };
 
-// Componente local para capturar datos de tarjeta (minimal)
-const CardForm = ({ onSubmit, onCancel, processing, error }: { onSubmit: (card: any) => Promise<any>, onCancel: () => void, processing?: boolean, error?: any }) => {
-  const [number, setNumber] = useState('4242424242424242');
-  const [name, setName] = useState('Cliente Prueba');
-  const [exp_month, setExpMonth] = useState('12');
-  const [exp_year, setExpYear] = useState('2026');
-  const [cvc, setCvc] = useState('123');
-  const [localError, setLocalError] = useState<string | null>(null);
-
-  const luhn = (num: string) => {
-    const s = num.replace(/\s+/g, '').replace(/-/g, '');
-    if (!/^[0-9]+$/.test(s)) return false;
-    let sum = 0;
-    let shouldDouble = false;
-    for (let i = s.length - 1; i >= 0; i--) {
-      let d = parseInt(s.charAt(i), 10);
-      if (shouldDouble) {
-        d *= 2;
-        if (d > 9) d -= 9;
-      }
-      sum += d;
-      shouldDouble = !shouldDouble;
-    }
-    return sum % 10 === 0;
-  };
-
-  const validExpiry = (mm: string, yyyy: string) => {
-    const m = parseInt(mm, 10);
-    const y = parseInt(yyyy, 10);
-    if (isNaN(m) || isNaN(y) || m < 1 || m > 12) return false;
-    const now = new Date();
-    const exp = new Date(y, m - 1, 1);
-    // set to last day of month
-    exp.setMonth(exp.getMonth() + 1);
-    exp.setDate(0);
-    return exp >= new Date(now.getFullYear(), now.getMonth(), 1);
-  };
-
-  const validCVC = (c: string) => {
-    return /^[0-9]{3,4}$/.test(c);
-  };
-
-  const handleSubmit = async () => {
-    setLocalError(null);
-    // basic normalization
-    const cardNum = number.replace(/\s+/g, '').replace(/-/g, '');
-    if (!luhn(cardNum)) return setLocalError('Número de tarjeta inválido');
-    if (!validExpiry(exp_month, exp_year)) return setLocalError('Fecha de vencimiento inválida');
-    if (!validCVC(cvc)) return setLocalError('CVC inválido');
-
-    // enviar al padre
-    try {
-      await onSubmit({ number: cardNum, name, exp_month, exp_year, cvc });
-    } catch {
-      // onSubmit ya maneja errores; aquí solo capturamos
-    }
-  };
-
-  return (
-    <div>
-      <div className="space-y-3">
-        <div>
-          <label className="text-gray-600 text-sm">Número de tarjeta</label>
-          <input placeholder="4242 4242 4242 4242" value={number} onChange={e => setNumber(e.target.value)} className="px-3 py-2 border rounded w-full" />
-        </div>
-        <div>
-          <label className="text-gray-600 text-sm">Nombre en la tarjeta</label>
-          <input placeholder="Nombre en la tarjeta" value={name} onChange={e => setName(e.target.value)} className="px-3 py-2 border rounded w-full" />
-        </div>
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="text-gray-600 text-sm">MM</label>
-            <input placeholder="MM" value={exp_month} onChange={e => setExpMonth(e.target.value)} className="px-3 py-2 border rounded w-full" />
-          </div>
-          <div className="flex-1">
-            <label className="text-gray-600 text-sm">YYYY</label>
-            <input placeholder="YYYY" value={exp_year} onChange={e => setExpYear(e.target.value)} className="px-3 py-2 border rounded w-full" />
-          </div>
-          <div className="flex-1">
-            <label className="text-gray-600 text-sm">CVC</label>
-            <input placeholder="CVC" value={cvc} onChange={e => setCvc(e.target.value)} className="px-3 py-2 border rounded w-full" />
-          </div>
-        </div>
-      </div>
-
-      {(localError || error) && <div className="mt-2 text-red-600 text-sm">{localError || String(error)}</div>}
-
-      <div className="flex gap-2 mt-4">
-        <button disabled={processing} onClick={handleSubmit} className="bg-primary px-4 py-2 rounded text-white">{processing ? 'Procesando...' : 'Pagar'}</button>
-        <button onClick={onCancel} disabled={processing} className="px-4 py-2 border rounded">Cancelar</button>
-      </div>
-    </div>
-  );
+/**
+ * Detecta el tipo de tarjeta basado en los primeros dígitos
+ */
+const detectCardType = (cardNumber: string): string => {
+  const cleaned = cardNumber.replace(/\s+/g, '').replace(/-/g, '');
+  
+  // Visa: empieza con 4
+  if (/^4/.test(cleaned)) return 'visa';
+  
+  // Mastercard: 51-55, 2221-2720
+  if (/^5[1-5]/.test(cleaned) || /^2(22[1-9]|2[3-9][0-9]|[3-6][0-9]{2}|7[01][0-9]|720)/.test(cleaned)) {
+    return 'mastercard';
+  }
+  
+  // American Express: 34 o 37
+  if (/^3[47]/.test(cleaned)) return 'amex';
+  
+  // Discover: 6011, 622126-622925, 644-649, 65
+  if (/^6011|^622(12[6-9]|1[3-9][0-9]|[2-8][0-9]{2}|9[01][0-9]|92[0-5])|^64[4-9]|^65/.test(cleaned)) {
+    return 'discover';
+  }
+  
+  // Diners Club: 36, 38, 300-305
+  if (/^3(6|8|0[0-5])/.test(cleaned)) return 'diners';
+  
+  // JCB: 2131, 1800, 35
+  if (/^(2131|1800|35)/.test(cleaned)) return 'jcb';
+  
+  return 'unknown';
 };
+
+/**
+ * Formatea el número de tarjeta con espacios
+ */
+const formatCardNumber = (value: string): string => {
+  const cleaned = value.replace(/\s+/g, '').replace(/[^0-9]/g, '');
+  const cardType = detectCardType(cleaned);
+  
+  // American Express usa formato 4-6-5
+  if (cardType === 'amex') {
+    return cleaned.replace(/(\d{4})(\d{6})(\d{5})/, '$1 $2 $3').trim();
+  }
+  
+  // Otros usan formato 4-4-4-4
+  return cleaned.replace(/(\d{4})/g, '$1 ').trim();
+};
+
+// Eliminado formulario de tarjeta local: usaremos StripeCheckout en una vista dedicada
 
 const ConfirmPage = () => {
   const params = useSearchParams();
@@ -154,7 +109,10 @@ const ConfirmPage = () => {
             commissionPercent: foundRemote.commission_percent ? Number(foundRemote.commission_percent) : undefined,
             commissionAmount: foundRemote.commission_amount ? Number(foundRemote.commission_amount) : undefined,
             method: foundRemote.method,
-            branch: foundRemote.branch_id ? `Sucursal ${foundRemote.branch_id}` : foundRemote.branch || 'Sucursal Centro',
+            branch: foundRemote.branch || 'Sucursal Centro',
+            branchAddress: foundRemote.branch_address,
+            branchCity: foundRemote.branch_city,
+            branchState: foundRemote.branch_state,
             status: humanizeStatus(foundRemote.status, foundRemote.type === 'buy' ? 'buy_card' : 'sell_cash') as Transaction['status'],
             createdAt: foundRemote.created_at ? new Date(foundRemote.created_at).getTime() : Date.now(),
           };
@@ -222,138 +180,14 @@ const ConfirmPage = () => {
 
   // nota: la comparación de "amountToNow" se dejó comentada en el JSX; mantener hook vacío
 
-  // --- Conekta / Pago con tarjeta (frontend) ---
-  const [showCardModal, setShowCardModal] = useState(false);
-  const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [cardProcessing, setCardProcessing] = useState(false);
-  const [cardError, setCardError] = useState<string | null>(null);
+  // --- Stripe / Pago con tarjeta (backend maneja todo) ---
+  // Sin modal: llevaremos al usuario a la página de StripeCheckout
   const router = useRouter();
 
-  // Cargar clave pública al montar (si existe en backend)
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/payments/config`);
-        const j = await res.json();
-        if (!mounted) return;
-        setPublicKey(j.publicKey || null);
-      } catch (_e) {
-        console.error('Error fetching payments config:', _e);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
-
-  const loadConektaScript = (key: string) => {
-    return new Promise<void>((resolve, reject) => {
-      if (typeof window === 'undefined') return reject(new Error('no-window'));
-      if ((window as any).Conekta) return resolve();
-      const s = document.createElement('script');
-      s.src = 'https://cdn.conekta.io/js/latest/conekta.js';
-      s.async = true;
-      s.onload = () => {
-        try {
-          (window as any).Conekta.setPublicKey(key);
-          resolve();
-        } catch (err) { reject(err); }
-      };
-      s.onerror = () => reject(new Error('Failed to load Conekta JS'));
-      document.head.appendChild(s);
-    });
-  };
-
-  const handleCreateCardTokenAndCharge = async (cardData: any) => {
-    setCardError(null);
-    setCardProcessing(true);
-    try {
-      // Si no hay publicKey, simulamos tokenización en desarrollo
-      if (!publicKey) {
-        console.warn('No publicKey available; using mock token for development');
-        return await sendChargeToBackend({ token_id: `tok-mock-${Date.now()}` });
-      }
-
-      await loadConektaScript(publicKey);
-
-      const Conekta = (window as any).Conekta;
-      if (!Conekta) throw new Error('Conekta JS no cargado');
-
-      // Crear token con Conekta
-      return new Promise<void>((resolve, reject) => {
-        Conekta.Token.create({ card: cardData }, async (tokenRes: any) => {
-          try {
-            console.log('Conekta token response:', tokenRes);
-            const token_id = tokenRes.id;
-            await sendChargeToBackend({ token_id });
-            resolve();
-          } catch (err) { reject(err); }
-        }, (err: any) => {
-          console.error('Conekta token error', err);
-          setCardError(err && err.message ? err.message : JSON.stringify(err));
-          setCardProcessing(false);
-          reject(err);
-        });
-      });
-    } catch (err: any) {
-      console.error('Error creating token/charge:', err);
-      setCardError(err && err.message ? err.message : String(err));
-      setCardProcessing(false);
-      throw err;
-    }
-  };
-
-  const sendChargeToBackend = async ({ token_id }: { token_id: string }) => {
-    try {
-      if (!tx) throw new Error('No transaction to charge');
-      // construir payload
-      const payload = {
-        amount: tx.amountFrom,
-        currency: 'MXN',
-        description: `Pago reserva ${tx.id}`,
-        card: { token_id },
-        transaction_code: tx.id,
-        customer: { name: 'Cliente', email: 'cliente@example.com' }
-      };
-
-      const userToken = Cookies.get('token') || '';
-      const res = await fetch(`${API_BASE}/payments/card`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`
-        },
-        body: JSON.stringify(payload)
-      });
-      const j = await res.json();
-      if (!res.ok) throw j;
-      // éxito
-      console.log('Charge success:', j);
-      // Si el pago fue exitoso y no requiere acción adicional, redirigir a la página de success
-      // No forzar redirección si se requiere acción (3DS/offsite)
-      if (!j.requires_action) {
-        // construir txId a partir de la transacción o usar tx.id
-        const txCode = tx?.id || '';
-        if (txCode) {
-          try { router.push(`/operacion/confirm/success?txId=${encodeURIComponent(txCode)}`); } catch (_err) { console.warn('No se pudo redirigir automáticamente al success:', _err); }
-        }
-      }
-      // Si el backend indica que se requiere una acción (3DS/offsite), abrir la URL
-      if (j && j.requires_action && j.action && j.action.url) {
-        // Abrir en nueva ventana para que el usuario complete la autenticación
-        window.open(j.action.url, '_blank');
-        // También podemos indicar al usuario que vuelva a la app cuando termine
-        alert('Se ha abierto una ventana para completar la autenticación del pago. Completa los pasos y verifica el estado de tu reserva.');
-      }
-      setCardProcessing(false);
-      setShowCardModal(false);
-      // Opcional: actualizar tx/status aquí o redirigir
-      return j;
-    } catch (err: any) {
-      console.error('Error sending charge to backend:', err);
-      setCardError(err && err.message ? err.message : JSON.stringify(err));
-      setCardProcessing(false);
-      throw err;
-    }
+  const goToStripeCheckout = () => {
+    if (!tx) return;
+    const txCode = tx.id;
+    router.push(`/operacion/confirm/checkout?txId=${encodeURIComponent(txCode)}`);
   };
 
   if (!tx) return <div>No se encontró la transacción.</div>;
@@ -383,10 +217,14 @@ const ConfirmPage = () => {
   const toCurrency = isBuying ? 'USD' : 'MXN';
   const fromLabel = isBuying ? 'Pagas' : 'Entregas';
   const toLabel = 'Recibes';
-  // Ocultar métodos de pago si la transacción ya está pagada (solo 'paid'/'pagado')
+  // Ocultar métodos de pago si la transacción ya está pagada o completada
   const humanStatus = (tx.status || '').toString().toLowerCase();
-  const showPaymentMethod = humanStatus.includes('pagado') || humanStatus.includes('paid') || humanStatus.includes('ready_for_pickup') || humanStatus.includes('ready_to_receive')
-    || humanStatus.includes('completed') || humanStatus.includes('cancelled') || humanStatus.includes('expired');
+  const hidePaymentMethod = humanStatus.includes('pagado') || humanStatus.includes('paid') 
+    || humanStatus.includes('listo para recoger') || humanStatus.includes('ready_for_pickup') 
+    || humanStatus.includes('ready_to_receive') || humanStatus.includes('listo para recibir')
+    || humanStatus.includes('completed') || humanStatus.includes('completado')
+    || humanStatus.includes('cancelled') || humanStatus.includes('cancelado')
+    || humanStatus.includes('expired') || humanStatus.includes('expirado');
 
   const formatPrettyDate = (ts: number) => {
     try {
@@ -404,194 +242,200 @@ const ConfirmPage = () => {
   };
 
   return (
-    <section className="mx-auto p-5 max-w-5xl">
-      <div className="flex sm:flex-row flex-col justify-between items-start sm:items-center gap-4 mb-6">
-        <div>
-          <h1 className="font-bold text-primary text-3xl">¡Reserva Confirmada!</h1>
-          <p className="mt-1 text-gray-600 text-sm">Tu operación ha sido registrada exitosamente</p>
-        </div>
-        <Link
-          href="/inicio"
-          aria-label="Ir a inicio"
-          className="inline-flex items-center gap-2 bg-primary hover:opacity-95 px-4 py-2 rounded-md text-white whitespace-nowrap"
-        >
-          Ir al inicio
+    <section className="mx-auto p-6 max-w-6xl">
+      <div className="mb-8">
+        <Link href="/inicio">
+          <Button variant="ghost" className="mb-6 cursor-pointer">
+            <svg className="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Volver al inicio
+          </Button>
         </Link>
+        <h1 className="mb-2 font-bold text-4xl">¡Reserva Confirmada!</h1>
+        <p className="text-muted-foreground text-base">Tu operación ha sido registrada exitosamente</p>
       </div>
 
-      <div className="gap-6 grid grid-cols-1 lg:grid-cols-3">
+      <div className="gap-8 grid grid-cols-1 lg:grid-cols-3">
         {/* Columna Principal - Información de la Transacción */}
         <div className="space-y-6 lg:col-span-2">
           {/* Folio y Estado */}
-          <div className="bg-white shadow-sm p-6 border border-gray-200 rounded-xl">
-            <div className="flex flex-row justify-between sm:items-center gap-4">
-              <div>
-                <div className="mb-1 text-gray-500 text-xs uppercase tracking-wide">Folio de Operación</div>
-                <div className="font-mono font-bold text-primary text-xl">{tx.id}</div>
+          <div className="bg-card shadow-sm p-8 border rounded-lg">
+            <div className="flex sm:flex-row flex-col justify-between items-start sm:items-center gap-6 mb-6">
+              <div className="flex-1">
+                <div className="mb-2 font-medium text-muted-foreground text-sm uppercase tracking-wide">Folio de Operación</div>
+                <div className="font-mono font-bold text-2xl">{tx.id}</div>
               </div>
-              <div className={`px-4 py-2 rounded-lg border ${getStatusColor(tx.status)}`}>
-                <div className="font-semibold">{tx.status}</div>
+              <div className={`px-5 py-2.5 rounded-md border ${getStatusColor(tx.status)}`}>
+                <div className="font-semibold text-sm">{tx.status}</div>
               </div>
-
             </div>
+            
+            <div className="mb-6 text-muted-foreground text-sm">
+              <span className="font-medium">Fecha:</span> {formatPrettyDate(tx.createdAt)}
+            </div>
+
             {/* Mostrar mensaje si ya fue pagado */}
             {((tx.status || '').toString().toLowerCase().includes('paid') || (tx.status || '').toString().toLowerCase().includes('pagado')) && (
-              <div className="bg-green-50 mt-4 p-4 border border-green-200 rounded-lg text-green-800 text-sm">
-                {"Gracias por tu pago. Hemos enviado tu solicitud a la sucursal. Por favor, espera a que nuestro personal prepare tu dinero. El estado cambiará a \"Listo para Recoger\" cuando puedas pasar por él."}
+              <div className="bg-muted/50 p-4 border rounded-md text-sm">
+                {"Tu pago ha sido confirmado exitosamente. Hemos notificado a la sucursal para preparar tu dinero. El estado cambiará a \"Listo para Recoger\" cuando puedas pasar por él."}
               </div>
             )}
           </div>
 
           {/* Resumen de la Operación */}
-          <div className="bg-white shadow-sm p-6 border border-gray-200 rounded-xl">
-            <h2 className="mb-4 font-semibold text-gray-900 text-lg">Resumen de la Operación</h2>
+          <div className="bg-card shadow-sm p-8 border rounded-lg">
+            <h2 className="mb-6 font-semibold text-xl">Resumen de la Operación</h2>
 
-            <div className="bg-gradient-to-br from-primary/5 to-secondary/5 mb-6 p-6 rounded-lg">
-              <div className="flex sm:flex-row flex-col justify-between items-center gap-6">
-                <div className="sm:text-left text-center">
-                  <div className="mb-2 text-gray-600 text-sm">Tú {fromLabel}</div>
-                  <div className="font-bold text-secondary text-3xl">${tx.amountFrom.toFixed(2)}</div>
-                  <div className="mt-1 font-medium text-gray-700 text-lg">{fromCurrency}</div>
+            <div className="bg-muted/30 mb-8 p-8 rounded-lg">
+              <div className="flex sm:flex-row flex-col justify-between items-center gap-8">
+                <div className="flex-1 sm:text-left text-center">
+                  <div className="mb-3 font-medium text-muted-foreground text-sm">Tú {fromLabel}</div>
+                  <div className="mb-2 font-bold text-4xl">${tx.amountFrom.toFixed(2)}</div>
+                  <div className="font-semibold text-lg">{fromCurrency}</div>
                 </div>
 
-                <div className="text-gray-400 text-3xl">→</div>
+                <div className="text-muted-foreground text-4xl">→</div>
 
-                <div className="text-center sm:text-right">
-                  <div className="mb-2 text-gray-600 text-sm">Tú {toLabel}</div>
-                  <div className="font-bold text-primary text-3xl">${tx.amountTo.toFixed(2)}</div>
-                  <div className="mt-1 font-medium text-gray-700 text-lg">{toCurrency}</div>
+                <div className="flex-1 text-center sm:text-right">
+                  <div className="mb-3 font-medium text-muted-foreground text-sm">Tú {toLabel}</div>
+                  <div className="mb-2 font-bold text-4xl">${tx.amountTo.toFixed(2)}</div>
+                  <div className="font-semibold text-lg">{toCurrency}</div>
                 </div>
               </div>
             </div>
 
-
-
-            <div className="gap-4 grid grid-cols-2 sm:grid-cols-4">
-              <div>
-                <div className="mb-1 text-gray-500 text-xs">Tipo</div>
-                <div className="font-medium text-gray-900">{isBuying ? 'Compra' : 'Venta'}</div>
+            <div className="gap-6 grid grid-cols-1 sm:grid-cols-2">
+              <div className="space-y-1">
+                <div className="font-medium text-muted-foreground text-xs">Tipo de Operación</div>
+                <div className="font-semibold text-base">{isBuying ? 'Compra' : 'Venta'}</div>
               </div>
-              <div>
-                <div className="mb-1 text-gray-500 text-xs">Tasa aplicada</div>
-                <div className="font-medium text-gray-900">${tx.rate.toFixed(4)}</div>
+              <div className="space-y-1">
+                <div className="font-medium text-muted-foreground text-xs">Tasa Aplicada</div>
+                <div className="font-semibold text-base">${tx.rate.toFixed(4)}</div>
               </div>
-              <div>
-                <div className="mb-1 text-gray-500 text-xs">Comisión</div>
-                <div className="font-medium text-gray-900">{tx.commissionPercent ? `${tx.commissionPercent.toFixed(2)}% ($${tx.commissionAmount?.toFixed(2)} MXN)` : '—'}</div>
+              <div className="space-y-1">
+                <div className="font-medium text-muted-foreground text-xs">Comisión</div>
+                <div className="font-semibold text-base">{tx.commissionPercent ? `${tx.commissionPercent.toFixed(2)}% ($${tx.commissionAmount?.toFixed(2)} MXN)` : '—'}</div>
               </div>
-              <div>
-                <div className="mb-1 text-gray-500 text-xs">Sucursal</div>
-                <div className="font-medium text-gray-900">{tx.branch}</div>
-              </div>
-              <div>
-                <div className="mb-1 text-gray-500 text-xs">Fecha y hora de la
-                  operación
-                </div>
-                <div className="font-medium text-gray-900">{formatPrettyDate(tx.createdAt)}</div>
+              <div className="space-y-1">
+                <div className="font-medium text-muted-foreground text-xs">Sucursal</div>
+                <div className="font-semibold text-base">{tx.branch}</div>
               </div>
             </div>
-
-
-
-            {/* {amountToNow !== null && (
-              <div className="mt-3 text-gray-600 text-sm">
-                {isBuying ? (
-                  <div>Con la tasa actual recibirías aproximadamente <strong>{amountToNow} {toCurrency}</strong> (comparado con la reserva de <strong>{tx.amountTo} {toCurrency}</strong>).</div>
-                ) : (
-                  <div>Con la tasa actual recibirías aproximadamente <strong>{amountToNow} {toCurrency}</strong> (comparado con la reserva de <strong>{tx.amountTo} {toCurrency}</strong>).</div>
-                )}
-              </div>
-            )} */}
           </div>
 
           {/* Método de Pago - Solo para compras (oculto si ya pagado/completado) */}
-          {isBuying && tx.method && !showPaymentMethod && (
-            <div className="bg-white shadow-sm p-6 border border-gray-200 rounded-xl">
-              <h2 className="mb-4 font-semibold text-gray-900 text-lg">Método de Pago</h2>
+          {isBuying && tx.method && !hidePaymentMethod && (
+            <div className="bg-card shadow-sm p-8 border rounded-lg">
+              <h2 className="mb-6 font-semibold text-xl">Método de Pago</h2>
 
               {tx.method.toLowerCase().includes('transfer') ? (
                 <div>
-                  <p className="mb-4 text-gray-600 text-sm">Selecciona cómo quieres completar tu pago:</p>
-                  <div className="flex flex-col gap-3">
-                    <button
-                      onClick={() => setShowCardModal(true)}
-                      className="flex justify-center items-center gap-3 bg-gradient-to-r from-blue-500 hover:from-blue-600 to-blue-600 hover:to-blue-700 shadow-lg px-6 py-4 rounded-lg font-semibold text-white hover:scale-105 transition-all duration-200 transform"
+                  <p className="mb-6 text-muted-foreground">Selecciona cómo quieres completar tu pago:</p>
+                  <div className="flex flex-col gap-4">
+                    <Button
+                      onClick={goToStripeCheckout}
+                      size="lg"
+                      className="w-full h-14 text-base"
                     >
-                      <CreditCard className="w-6 h-6" />
+                      <CreditCard className="mr-2 w-5 h-5" />
                       Pagar con Tarjeta
-                    </button>
-                    <button className="flex justify-center items-center gap-3 bg-gradient-to-r from-green-500 hover:from-green-600 to-green-600 hover:to-green-700 shadow-lg px-6 py-4 rounded-lg font-semibold text-white hover:scale-105 transition-all duration-200 transform">
-                      <Banknote className="w-6 h-6" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full h-14 text-base"
+                    >
+                      <Banknote className="mr-2 w-5 h-5" />
                       Transferencia Bancaria
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="font-medium text-gray-900">{humanizeMethod(tx.method)}</div>
-                  <p className="mt-2 text-gray-600 text-sm">Completa tu pago directamente en la sucursal seleccionada</p>
+                <div className="bg-muted/50 p-6 rounded-md">
+                  <div className="mb-2 font-semibold text-base">{humanizeMethod(tx.method)}</div>
+                  <p className="text-muted-foreground text-sm">Completa tu pago directamente en la sucursal seleccionada</p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Modal simple para tarjeta */}
-          {showCardModal && (
-            <div className="z-50 fixed inset-0 flex justify-center items-center bg-black bg-opacity-50">
-              <div className="bg-white p-6 rounded-lg w-full max-w-md">
-                <h3 className="mb-4 font-semibold text-lg">Pagar con tarjeta</h3>
-                <CardForm onSubmit={async (card) => {
-                  try {
-                    await handleCreateCardTokenAndCharge(card);
-                  } catch {
-                    // error tratado en la función
-                  }
-                }} onCancel={() => setShowCardModal(false)} processing={cardProcessing} error={cardError} />
-              </div>
-            </div>
-          )}
+          {/* Modal eliminado; el pago se hace en la vista /checkout */}
         </div>
 
         {/* Columna Lateral - QR Code (mostrar siempre si hay tx.id) */}
         {qrUrl && (
           <div className="lg:col-span-1">
-            <div className="lg:top-6 lg:sticky bg-white shadow-sm p-6 border border-gray-200 rounded-xl">
-              <h2 className="mb-4 font-semibold text-gray-900 text-lg text-center">Tu Código QR</h2>
+            <div className="lg:top-6 lg:sticky bg-card shadow-sm p-8 border rounded-lg">
+              <h2 className="mb-6 font-semibold text-xl text-center">Tu Código QR</h2>
 
               <div className="flex flex-col items-center">
-                <Image
-                  className="shadow-md border-4 border-gray-300 rounded-lg"
-                  src={qrUrl}
-                  alt={`QR ${tx.id}`}
-                  width={200}
-                  height={200}
-                />
+                <div className="bg-muted/30 p-4 rounded-lg">
+                  <Image
+                    className="shadow-md border-4 border-border rounded-lg"
+                    src={qrUrl}
+                    alt={`QR ${tx.id}`}
+                    width={200}
+                    height={200}
+                  />
+                </div>
 
-                <div className="space-y-2 mt-4 text-center">
-                  <p className="font-medium text-gray-700 text-sm">
+                <div className="space-y-3 mt-6 text-center">
+                  <p className="font-medium text-base">
                     Presenta este código en la sucursal
                   </p>
-                  <p className="text-gray-500 text-xs">
+                  <p className="text-muted-foreground text-sm">
                     El personal escaneará este código para procesar tu operación
                   </p>
                 </div>
 
-                <button
+                <Button
                   onClick={downloadQR}
-                  className="bg-primary hover:bg-primary/90 mt-4 px-6 py-2 rounded-lg w-full font-medium text-white transition-colors"
+                  variant="outline"
+                  size="lg"
+                  className="mt-6 w-full"
                 >
                   Descargar QR
-                </button>
+                </Button>
               </div>
 
-              <div className="bg-blue-50 mt-6 p-4 border border-blue-200 rounded-lg">
-                <p className="font-medium text-blue-900 text-sm">💡 Próximos pasos:</p>
-                <ol className="space-y-1 mt-2 text-blue-800 text-xs list-decimal list-inside">
-                  <li>Acude a la sucursal seleccionada</li>
-                  <li>Presenta este código QR</li>
-                  <li>Completa tu operación</li>
-                </ol>
-              </div>
+              {/* Información de la Sucursal */}
+              {(tx.branch || tx.branchAddress) && (
+                <div className="bg-muted/50 mt-8 p-5 border rounded-md">
+                  <div className="flex items-start gap-3">
+                    <svg className="flex-shrink-0 mt-0.5 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <div className="flex-1">
+                      <p className="mb-2 font-semibold text-sm">{tx.branch}</p>
+                      {tx.branchAddress && (
+                        <p className="mb-1 text-muted-foreground text-xs">{tx.branchAddress}</p>
+                      )}
+                      {(tx.branchCity || tx.branchState) && (
+                        <p className="text-muted-foreground text-xs">
+                          {[tx.branchCity, tx.branchState].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Mostrar próximos pasos solo si no está completado, cancelado o expirado */}
+              {!humanStatus.includes('completed') && !humanStatus.includes('completado') && 
+               !humanStatus.includes('cancelled') && !humanStatus.includes('cancelado') && 
+               !humanStatus.includes('expired') && !humanStatus.includes('expirado') && (
+                <div className="bg-muted/50 mt-6 p-5 border rounded-md">
+                  <p className="mb-3 font-semibold text-sm">Próximos pasos:</p>
+                  <ol className="space-y-2 text-muted-foreground text-sm list-decimal list-inside">
+                    <li>Acude a la sucursal seleccionada</li>
+                    <li>Presenta este código QR</li>
+                    <li>Completa tu operación</li>
+                  </ol>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -119,17 +119,34 @@ const changeTransactionStatus = async (req, res, next) => {
           if (resRows && resRows.length) {
             for (const r of resRows) {
               try {
-                // devolver al inventario
-                await connection.query('UPDATE inventory SET amount = amount + ? WHERE branch_id = ? AND currency = ?', [r.amount_reserved, r.branch_id, r.currency]);
+                // IMPORTANTE: Solo marcar la reserva como liberada
+                // NO devolver al inventario porque nunca se descontó
                 await connection.query('UPDATE inventory_reservations SET status = ?, released_at = NOW() WHERE id = ?', ['released', r.id]);
-                // opcional: insertar en inventory_adjustments para trazabilidad (skipped aquí)
+                
+                // Registrar en inventory_adjustments solo para auditoría (sin cambio de monto)
+                try {
+                  const [invRows] = await connection.query(
+                    'SELECT id FROM inventory WHERE branch_id = ? AND currency = ? LIMIT 1',
+                    [r.branch_id, r.currency]
+                  );
+                  if (invRows && invRows[0]) {
+                    await connection.query(
+                      'INSERT INTO inventory_adjustments (inventory_id, old_amount, new_amount, adjustment_type, reason, adjusted_by) VALUES (?, ?, ?, ?, ?, ?)',
+                      [invRows[0].id, null, null, 'exit', `Reserva de ${r.amount_reserved} ${r.currency} liberada para transacción ${id} (${status})`, req.user?.id || null]
+                    );
+                  }
+                } catch (adjErr) {
+                  console.warn('Error registrando adjustment de reserva liberada:', adjErr && adjErr.message ? adjErr.message : adjErr);
+                }
+                
+                console.log(`✓ Reserva liberada: ${r.amount_reserved} ${r.currency} para transacción ${id}`);
               } catch (inner) {
-                console.warn('Error liberando reserva desde admin changeStatus:', inner && inner.message ? inner.message : inner);
+                console.warn('Error liberando reserva:', inner && inner.message ? inner.message : inner);
               }
             }
           }
         } catch (qErr) {
-          console.warn('Error buscando inventory_reservations en changeTransactionStatus:', qErr && qErr.message ? qErr.message : qErr);
+          console.warn('Error buscando inventory_reservations para cancelar:', qErr && qErr.message ? qErr.message : qErr);
         }
 
         // Notificar al cliente sobre cancelación/expiración
@@ -160,43 +177,45 @@ const changeTransactionStatus = async (req, res, next) => {
         }
       }
 
-      // Si se marca como pagada o completada, marcar reservas como committed
-      // y acreditar al inventario la moneda que la sucursal debe recibir.
-      if (status === 'paid' || status === 'completed') {
+      // LÓGICA CORREGIDA: Separar el flujo de PAID y COMPLETED
+      
+      // Si se marca como PAID: solo confirmar el pago, NO tocar inventario
+      if (status === 'paid') {
         try {
-          // Obtener reservas pendientes para esta transacción
-          const [resRows] = await connection.query('SELECT id, branch_id, currency, amount_reserved FROM inventory_reservations WHERE transaction_id = ? AND status = ?', [id, 'reserved']);
+          // Obtener datos de la transacción para auditoría
+          const [txFullRows] = await connection.query(
+            'SELECT id, branch_id, currency_to FROM transactions WHERE id = ?', 
+            [id]
+          );
+          const txFull = txFullRows && txFullRows[0] ? txFullRows[0] : null;
 
-          if (resRows && resRows.length) {
-            // Obtener datos de la transacción para saber qué moneda y monto acreditar
-            const [txFullRows] = await connection.query('SELECT id, branch_id, amount_from, currency_from FROM transactions WHERE id = ?', [id]);
-            const txFull = txFullRows && txFullRows[0] ? txFullRows[0] : null;
+          if (txFull) {
+            // Solo registrar en inventory_adjustments para auditoría (sin cambio de monto)
+            const [invRowsTo] = await connection.query(
+              'SELECT id FROM inventory WHERE branch_id = ? AND currency = ? LIMIT 1',
+              [txFull.branch_id, txFull.currency_to]
+            );
+            const inventoryIdTo = invRowsTo && invRowsTo[0] ? invRowsTo[0].id : null;
 
-            if (txFull && txFull.amount_from && txFull.currency_from) {
-              // Acreditar al inventario de la sucursal asociada a la transacción (una sola vez)
+            if (inventoryIdTo) {
               try {
-                await connection.query('UPDATE inventory SET amount = amount + ? WHERE branch_id = ? AND currency = ?', [txFull.amount_from, txFull.branch_id, txFull.currency_from]);
-              } catch (creditErr) {
-                console.warn('Error acreditando inventario al confirmar transacción:', creditErr && creditErr.message ? creditErr.message : creditErr);
+                await connection.query(
+                  'INSERT INTO inventory_adjustments (inventory_id, old_amount, new_amount, adjustment_type, reason, adjusted_by) VALUES (?, ?, ?, ?, ?, ?)',
+                  [inventoryIdTo, null, null, 'exit', `Pago confirmado para transacción ${txFull.id} - pendiente de completar`, req.user?.id || null]
+                );
+              } catch (adjErr) {
+                console.warn('Error registrando adjustment de pago confirmado:', adjErr && adjErr.message ? adjErr.message : adjErr);
               }
-            } else {
-              console.warn('Transacción no encontrada o sin monto/moneda para acreditar:', id);
             }
-
-            // Marcar todas las reservas como committed (se actualiza aunque la acreditación falle para mantener consistencia del estado)
-            const reservationIds = resRows.map(r => r.id);
-            try {
-              await connection.query(`UPDATE inventory_reservations SET status = ?, committed_at = NOW() WHERE id IN (${reservationIds.map(() => '?').join(',')})`, ['committed', ...reservationIds]);
-            } catch (commitErr) {
-              console.warn('Error marcando inventory_reservations como committed desde admin changeStatus:', commitErr && commitErr.message ? commitErr.message : commitErr);
-            }
+            
+            console.log(`✓ Transacción ${id} marcada como PAID. Inventario NO modificado (se ajustará al completar).`);
           }
-        } catch (cErr) {
-          console.warn('Error procesando reservas al marcar transacción como pagada/completada:', cErr && cErr.message ? cErr.message : cErr);
+        } catch (paidErr) {
+          console.warn('Error registrando confirmación de pago:', paidErr && paidErr.message ? paidErr.message : paidErr);
         }
 
         // Notificar al cliente sobre pago confirmado
-        if (status === 'paid' && tx && tx.user_id) {
+        if (tx && tx.user_id) {
           try {
             await connection.query(
               'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
@@ -218,6 +237,114 @@ const changeTransactionStatus = async (req, res, next) => {
               console.warn('No se pudo emitir notificación a usuario:', emitErr && emitErr.message ? emitErr.message : emitErr);
             }
           }
+        }
+      }
+
+      // Si se marca como COMPLETED: AQUÍ SÍ ajustar el inventario
+      if (status === 'completed' || status === 'ready_for_pickup' || status === 'ready_to_receive') {
+        try {
+          // Obtener datos completos de la transacción
+          const [txFullRows] = await connection.query(
+            'SELECT id, branch_id, type, amount_from, currency_from, amount_to, currency_to FROM transactions WHERE id = ?', 
+            [id]
+          );
+          const txFull = txFullRows && txFullRows[0] ? txFullRows[0] : null;
+
+          if (txFull) {
+            // Obtener el inventory_id para registrar en inventory_adjustments
+            const [invRowsFrom] = await connection.query(
+              'SELECT id FROM inventory WHERE branch_id = ? AND currency = ? LIMIT 1',
+              [txFull.branch_id, txFull.currency_from]
+            );
+            const [invRowsTo] = await connection.query(
+              'SELECT id, amount FROM inventory WHERE branch_id = ? AND currency = ? LIMIT 1',
+              [txFull.branch_id, txFull.currency_to]
+            );
+
+            const inventoryIdFrom = invRowsFrom && invRowsFrom[0] ? invRowsFrom[0].id : null;
+            const inventoryIdTo = invRowsTo && invRowsTo[0] ? invRowsTo[0].id : null;
+            const oldAmountTo = invRowsTo && invRowsTo[0] ? Number(invRowsTo[0].amount) : 0;
+
+            // 1. DESCONTAR lo que la sucursal entrega (currency_to, amount_to)
+            try {
+              const [updateResult] = await connection.query(
+                'UPDATE inventory SET amount = amount - ? WHERE branch_id = ? AND currency = ?', 
+                [txFull.amount_to, txFull.branch_id, txFull.currency_to]
+              );
+
+              if (updateResult.affectedRows === 0) {
+                console.error(`CRITICAL: No se pudo descontar ${txFull.amount_to} ${txFull.currency_to} de branch ${txFull.branch_id}`);
+              } else {
+                // Registrar en inventory_adjustments
+                if (inventoryIdTo) {
+                  try {
+                    await connection.query(
+                      'INSERT INTO inventory_adjustments (inventory_id, old_amount, new_amount, adjustment_type, reason, adjusted_by) VALUES (?, ?, ?, ?, ?, ?)',
+                      [inventoryIdTo, oldAmountTo, oldAmountTo - txFull.amount_to, 'exit', `Entrega completada para transacción ${txFull.id}`, req.user?.id || null]
+                    );
+                  } catch (adjErr) {
+                    console.warn('Error registrando adjustment de salida:', adjErr && adjErr.message ? adjErr.message : adjErr);
+                  }
+                }
+                console.log(`✓ Descontado ${txFull.amount_to} ${txFull.currency_to} de sucursal ${txFull.branch_id}`);
+              }
+            } catch (deductErr) {
+              console.error('Error descontando inventario al completar transacción:', deductErr && deductErr.message ? deductErr.message : deductErr);
+            }
+
+            // 2. ACREDITAR lo que la sucursal recibe (currency_from, amount_from)
+            try {
+              const [invBeforeCredit] = await connection.query(
+                'SELECT amount FROM inventory WHERE branch_id = ? AND currency = ? LIMIT 1',
+                [txFull.branch_id, txFull.currency_from]
+              );
+              const oldAmountFrom = invBeforeCredit && invBeforeCredit[0] ? Number(invBeforeCredit[0].amount) : 0;
+
+              const [updateResult] = await connection.query(
+                'UPDATE inventory SET amount = amount + ? WHERE branch_id = ? AND currency = ?', 
+                [txFull.amount_from, txFull.branch_id, txFull.currency_from]
+              );
+
+              if (updateResult.affectedRows === 0) {
+                console.error(`CRITICAL: No se pudo acreditar ${txFull.amount_from} ${txFull.currency_from} a branch ${txFull.branch_id}`);
+              } else {
+                // Registrar en inventory_adjustments
+                if (inventoryIdFrom) {
+                  try {
+                    await connection.query(
+                      'INSERT INTO inventory_adjustments (inventory_id, old_amount, new_amount, adjustment_type, reason, adjusted_by) VALUES (?, ?, ?, ?, ?, ?)',
+                      [inventoryIdFrom, oldAmountFrom, oldAmountFrom + txFull.amount_from, 'entry', `Recepción completada de transacción ${txFull.id}`, req.user?.id || null]
+                    );
+                  } catch (adjErr) {
+                    console.warn('Error registrando adjustment de entrada:', adjErr && adjErr.message ? adjErr.message : adjErr);
+                  }
+                }
+                console.log(`✓ Acreditado ${txFull.amount_from} ${txFull.currency_from} a sucursal ${txFull.branch_id}`);
+              }
+            } catch (creditErr) {
+              console.error('Error acreditando inventario al completar transacción:', creditErr && creditErr.message ? creditErr.message : creditErr);
+            }
+
+            // 3. Marcar reservas como committed
+            try {
+              const [updateResResult] = await connection.query(
+                'UPDATE inventory_reservations SET status = ?, committed_at = NOW() WHERE transaction_id = ? AND status = ?',
+                ['committed', id, 'reserved']
+              );
+              
+              if (updateResResult.affectedRows === 0) {
+                console.warn(`No se encontraron reservas pendientes para transacción ${id}`);
+              } else {
+                console.log(`✓ Reserva marcada como committed para transacción ${id}`);
+              }
+            } catch (commitErr) {
+              console.warn('Error marcando inventory_reservations como committed:', commitErr && commitErr.message ? commitErr.message : commitErr);
+            }
+          } else {
+            console.warn('Transacción no encontrada para completar:', id);
+          }
+        } catch (cErr) {
+          console.warn('Error procesando inventario al completar transacción:', cErr && cErr.message ? cErr.message : cErr);
         }
 
         // Notificar a la sucursal sobre operación completada

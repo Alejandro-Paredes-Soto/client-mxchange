@@ -42,6 +42,8 @@ const AdminConfigPage = () => {
   const [isAddBranchOpen, setIsAddBranchOpen] = useState(false);
   const [isEditBranchOpen, setIsEditBranchOpen] = useState(false);
   const [isDeleteBranchOpen, setIsDeleteBranchOpen] = useState(false);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
   const [newBranchData, setNewBranchData] = useState({
     name: '',
@@ -244,16 +246,61 @@ const AdminConfigPage = () => {
   };
 
   const onUpdateCommission = async () => {
-    const token = Cookies.get('token');
-    if (!token) return;
     // validate numeric
     const num = Number(commission);
-    if (Number.isNaN(num)) return alert('Valor de comisión inválido');
-    const res = await updateSetting('commission_percent', String(num), token);
-    if (res && (res.error === undefined)) {
-      toast.success('Comisión actualizada');
-    } else {
-      toast.error('Error al guardar comisión');
+    if (Number.isNaN(num)) {
+      toast.error('Valor de comisión inválido');
+      return;
+    }
+
+    // Abrir el dialog para solicitar contraseña
+    setPasswordInput('');
+    setIsPasswordDialogOpen(true);
+  };
+
+  const confirmUpdateCommission = async () => {
+    const token = Cookies.get('token');
+    if (!token) return;
+
+    if (!passwordInput.trim()) {
+      toast.error('Por favor ingresa tu contraseña');
+      return;
+    }
+
+    // Verificar la contraseña haciendo login
+    try {
+      const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: JSON.parse(atob(token.split('.')[1])).email,
+          password: passwordInput,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        toast.error('Contraseña incorrecta');
+        return;
+      }
+
+      // Si la contraseña es correcta, actualizar la comisión
+      const num = Number(commission);
+      const res = await updateSetting('commission_percent', String(num), token);
+      if (res && (res.error === undefined)) {
+        toast.success('Comisión actualizada correctamente');
+        setIsPasswordDialogOpen(false);
+        setPasswordInput('');
+      } else {
+        toast.error('Error al guardar comisión');
+      }
+    } catch (error) {
+      console.error('Error verificando contraseña:', error);
+      toast.error('Error al verificar la contraseña');
     }
   };
 
@@ -611,6 +658,52 @@ const AdminConfigPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog para confirmar actualización de comisión */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar Actualización de Comisión</DialogTitle>
+            <DialogDescription>
+              Por razones de seguridad, ingresa tu contraseña para confirmar el cambio de comisión.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="gap-4 grid py-4">
+            <div className="space-y-2">
+              <Label htmlFor="password-confirm">Contraseña</Label>
+              <Input
+                id="password-confirm"
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Ingresa tu contraseña"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    confirmUpdateCommission();
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsPasswordDialogOpen(false);
+                setPasswordInput('');
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmUpdateCommission}
+              className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
