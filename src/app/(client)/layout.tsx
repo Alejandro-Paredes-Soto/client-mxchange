@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { SocketProvider, useNotifications } from '@/providers/SocketProvider';
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
+import Cookies from 'js-cookie';
 import {
   Sidebar,
   SidebarContent,
@@ -36,10 +38,15 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
 
   async function handleLogout() {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      // Limpia tu token custom y storage primero (usado por el backend/middleware)
+      Cookies.remove('token', { path: '/' });
+      if (typeof window !== 'undefined') localStorage.clear();
+
+      // Cierra la sesión de NextAuth y redirige al login
+      await signOut({ callbackUrl: '/login' });
     } catch (err) {
       console.error('Logout failed', err);
-    } finally {
+      // Fallback de navegación si algo falla
       router.push('/login');
     }
   }
@@ -129,11 +136,11 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
               <SheetHeader>
                 <SheetTitle>Notificaciones</SheetTitle>
               </SheetHeader>
-              <div className="mt-4">
+              <div className="px-3">
                 {notifications.length === 0 ? (
                   <div className="text-gray-500 text-sm">No hay notificaciones.</div>
                 ) : (
-                  <ul className="space-y-2">
+                  <ul className="gap-2 grid">
                     {notifications.map((n, idx) => (
                       <li
                         key={idx}

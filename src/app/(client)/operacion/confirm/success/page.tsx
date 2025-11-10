@@ -148,7 +148,7 @@ export default function SuccessPage() {
         </Button>
         <div className="flex items-center gap-3 mb-2">
           <CheckCircle2 className="w-8 h-8 text-green-600" />
-          <h1 className="font-bold text-3xl tracking-tight">Pago Recibido</h1>
+          <h1 className="font-bold text-primary text-3xl tracking-tight">Pago Recibido</h1>
         </div>
         <p className="text-muted-foreground">
           Tu transacción ha sido procesada exitosamente

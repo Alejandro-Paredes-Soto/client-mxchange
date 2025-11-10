@@ -120,7 +120,7 @@ const MisMovimientos = () => {
   if (loading) return (
     <div className="mx-auto p-6 max-w-7xl">
       <div className="mb-8">
-        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
         <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
       </div>
       <div className="bg-card p-8 border rounded-lg text-center">
@@ -136,7 +136,7 @@ const MisMovimientos = () => {
   if (error) return (
     <div className="mx-auto p-6 max-w-7xl">
       <div className="mb-8">
-        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
         <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
       </div>
       <div className="bg-destructive/10 p-6 border border-destructive/20 rounded-lg">
@@ -148,7 +148,7 @@ const MisMovimientos = () => {
   if (!items || items.length === 0) return (
     <div className="mx-auto p-6 max-w-7xl">
       <div className="mb-8">
-        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
         <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
       </div>
       <div className="bg-card p-12 border rounded-lg text-center">
@@ -162,13 +162,13 @@ const MisMovimientos = () => {
   return (
     <section className="mx-auto p-6 max-w-7xl">
       <div className="mb-8">
-        <h1 className="mb-2 font-bold text-4xl">Mis Movimientos</h1>
+        <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
         <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
       </div>
       
       {/* Filters */}
       <div className="bg-card mb-8 p-6 border rounded-lg">
-        <h2 className="mb-4 font-semibold text-lg">Filtros de búsqueda</h2>
+        <h2 className="mb-4 font-semibold text-primary text-lg">Filtros de búsqueda</h2>
         <div className="gap-4 grid grid-cols-1 md:grid-cols-4">
           <div className="space-y-2">
             <Label>Folio</Label>

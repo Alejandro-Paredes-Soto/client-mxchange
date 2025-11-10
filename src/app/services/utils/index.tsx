@@ -23,15 +23,19 @@ const useUtils = () => {
     (response) => response,
     (er) => {
       if (er.response?.status === 401) {
-        // Token inválido o expirado, redirigir al login
-        alert('Sesión expirada. Redirigiendo al login.');
-        localStorage.clear();
-        Cookies.remove('token');
-        window.location.href = '/login';
-        return;
+        // Solo redirigir si ya hay un token (sesión activa expirada)
+        // No redirigir si es un intento de login/registro sin token
+        const currentToken = Cookies.get('token');
+        if (currentToken) {
+          alert('Sesión expirada. Redirigiendo al login.');
+          localStorage.clear();
+          Cookies.remove('token');
+          window.location.href = '/login';
+        }
+        return Promise.reject(er);
       }
-      alert(er.response?.data.message || er?.message);
-      return;
+      // No mostrar alert aquí, dejar que cada función maneje sus errores
+      return Promise.reject(er);
     }
   );
 

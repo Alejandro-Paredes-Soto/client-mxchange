@@ -45,22 +45,42 @@ const Inicio = () => {
       const idUser = (session as any)?.idUser
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const isValidToken = (session as any)?.isValidToken;
+      
+      console.log('🔍 [inicio/page] Google Login detected');
+      console.log('🔍 [inicio/page] token:', token ? `${token.substring(0, 50)}...` : 'undefined');
+      console.log('🔍 [inicio/page] idUser:', idUser);
+      console.log('🔍 [inicio/page] isValidToken:', isValidToken);
+      
       if (token && token !== "undefined" && token !== "null") {
         localStorage.setItem("email", session.user?.email == null ? "" : session.user?.email);
         localStorage.setItem("name", session.user?.name == null ? "" : session.user?.name);
         localStorage.setItem("idUser", idUser);
         localStorage.setItem("lastname", "");
 
-        if (isValidToken.idUser) {
+        // Verificar si el token es válido
+        // isValidToken es el payload decodificado del JWT, que contiene { id, email, role, branch_id, iat, exp }
+        const tokenIsValid = isValidToken && typeof isValidToken === 'object' && (isValidToken.id || isValidToken.idUser);
+        
+        console.log('🔍 [inicio/page] tokenIsValid:', tokenIsValid);
+        
+        if (tokenIsValid) {
           localStorage.setItem("token", token);
+          // IMPORTANTE: También guardar el token en cookies para que OperationForm y otros componentes lo puedan usar
+          Cookies.set('token', token, { path: '/', expires: 0.33 }); // expires en 0.33 días = 8 horas (igual que el JWT)
+          console.log('✅ [inicio/page] Token guardado en localStorage y cookies');
         } else {
           localStorage.removeItem("token");
+          Cookies.remove('token', { path: '/' });
+          console.log('❌ [inicio/page] Token inválido, removido de localStorage y cookies');
         }
       }
     } else if (authGoogle == "false") {
       if (localStorage.getItem("token")) {
         const validToken = isTokenExpired(localStorage.getItem("token")!);
-        if (validToken) localStorage.removeItem("token");
+        if (validToken) {
+          localStorage.removeItem("token");
+          Cookies.remove('token', { path: '/' });
+        }
       }
     }
   }, [session, status, isTokenExpired]);
@@ -132,7 +152,7 @@ const Inicio = () => {
   return (
     <section className="mx-auto p-6">
       <header className="mb-8">
-        <h1 className="mb-2 font-bold text-4xl">
+        <h1 className="mb-2 font-bold text-primary text-4xl">
           Bienvenido{displayName ? `, ${displayName}` : ''}
         </h1>
         <p className="text-muted-foreground text-base">
@@ -146,7 +166,7 @@ const Inicio = () => {
 
           <section className="my-12">
             <div className="mb-6">
-              <h2 className="mb-2 font-semibold text-2xl">Resumen de actividad</h2>
+              <h2 className="mb-2 font-semibold text-primary text-2xl">Resumen de actividad</h2>
               <p className="text-muted-foreground text-sm">Tus últimas 5 transacciones</p>
             </div>
             <div className="space-y-4">

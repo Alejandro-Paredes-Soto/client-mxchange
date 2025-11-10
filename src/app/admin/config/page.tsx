@@ -307,7 +307,7 @@ const AdminConfigPage = () => {
   return (
     <div className="mx-auto px-4 py-8 max-w-6xl container">
       <div className="mb-8">
-        <h1 className="font-bold text-3xl tracking-tight">Configuración del Sistema</h1>
+        <h1 className="font-bold text-primary text-3xl tracking-tight">Configuración del Sistema</h1>
         <p className="mt-2 text-muted-foreground">
           Administra las tasas de cambio, sucursales y configuraciones generales
         </p>

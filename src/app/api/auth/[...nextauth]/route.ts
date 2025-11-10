@@ -92,17 +92,37 @@ const handler = NextAuth({
     },
 
     redirect({ baseUrl, url }) {
+      // Respeta callbackUrl explícito (por ejemplo, signOut -> '/login')
+      try {
+        // Si es una ruta relativa, combínala con baseUrl
+        if (url.startsWith('/')) {
+          return `${baseUrl}${url}`;
+        }
+        // Si pertenece al mismo origin, permítela
+        const parsed = new URL(url);
+        if (parsed.origin === baseUrl) {
+          return url;
+        }
+      } catch {
+        // Si URL no es válida, cae al default
+      }
+
+      // Default: después de login OAuth, envía a /inicio
       return `${baseUrl}/inicio`;
     },
   },
 
   pages: {
+    signIn: "/login",
     error: "/auth/error",
   },
 
   session: {
     strategy: "jwt",
   },
+
+  // Activa logs útiles en desarrollo para depurar redirecciones y sesión
+  debug: process.env.NODE_ENV !== 'production',
 
   secret: process.env.NEXTAUTH_SECRET,
 });

@@ -21,6 +21,7 @@ import { useNotifications, SocketProvider } from '@/providers/SocketProvider';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useState, useEffect } from "react";
 import Cookies from 'js-cookie';
+import { signOut } from "next-auth/react";
 
 const menuItems = [
   {
@@ -91,10 +92,15 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 
   async function handleLogout() {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      // Limpia tu token custom y storage primero (usado por el backend/middleware)
+      Cookies.remove('token', { path: '/' });
+      if (typeof window !== 'undefined') localStorage.clear();
+
+      // Cierra la sesión de NextAuth y redirige al login
+      await signOut({ callbackUrl: '/login' });
     } catch (err) {
       console.error('Logout failed', err);
-    } finally {
+      // Fallback de navegación si algo falla
       router.push('/login');
     }
   }
@@ -121,7 +127,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-4 py-2">
-            <h2 className="font-semibold text-lg">Admin Panel</h2>
+            <h2 className="font-semibold text-primary text-lg">Admin Panel</h2>
           </div>
         </SidebarHeader>
         <SidebarContent>

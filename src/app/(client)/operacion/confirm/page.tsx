@@ -252,7 +252,7 @@ const ConfirmPage = () => {
             Volver al inicio
           </Button>
         </Link>
-        <h1 className="mb-2 font-bold text-4xl">¡Reserva Confirmada!</h1>
+        <h1 className="mb-2 font-bold text-primary text-4xl">¡Reserva Confirmada!</h1>
         <p className="text-muted-foreground text-base">Tu operación ha sido registrada exitosamente</p>
       </div>
 
@@ -285,7 +285,7 @@ const ConfirmPage = () => {
 
           {/* Resumen de la Operación */}
           <div className="bg-card shadow-sm p-8 border rounded-lg">
-            <h2 className="mb-6 font-semibold text-xl">Resumen de la Operación</h2>
+            <h2 className="mb-6 font-semibold text-primary text-xl">Resumen de la Operación</h2>
 
             <div className="bg-muted/30 mb-8 p-8 rounded-lg">
               <div className="flex sm:flex-row flex-col justify-between items-center gap-8">
@@ -328,7 +328,7 @@ const ConfirmPage = () => {
           {/* Método de Pago - Solo para compras (oculto si ya pagado/completado) */}
           {isBuying && tx.method && !hidePaymentMethod && (
             <div className="bg-card shadow-sm p-8 border rounded-lg">
-              <h2 className="mb-6 font-semibold text-xl">Método de Pago</h2>
+              <h2 className="mb-6 font-semibold text-primary text-xl">Método de Pago</h2>
 
               {tx.method.toLowerCase().includes('transfer') ? (
                 <div>
@@ -368,7 +368,7 @@ const ConfirmPage = () => {
         {qrUrl && (
           <div className="lg:col-span-1">
             <div className="lg:top-6 lg:sticky bg-card shadow-sm p-8 border rounded-lg">
-              <h2 className="mb-6 font-semibold text-xl text-center">Tu Código QR</h2>
+              <h2 className="mb-6 font-semibold text-primary text-xl text-center">Tu Código QR</h2>
 
               <div className="flex flex-col items-center">
                 <div className="bg-muted/30 p-4 rounded-lg">

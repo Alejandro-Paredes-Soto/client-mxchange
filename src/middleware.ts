@@ -7,7 +7,9 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const token = request.cookies.get('token')?.value;
 
-    // Verificar si el usuario está autenticado
+    console.log('[middleware] Pathname:', pathname);
+
+    // Verificar si el usuario está autenticado y obtener su rol
     let isAuthenticated = false;
     let userRole: string | undefined;
 
@@ -18,17 +20,20 @@ export async function middleware(request: NextRequest) {
             });
             isAuthenticated = true;
             userRole = (payload as { role?: string }).role;
+            console.log('[middleware] Usuario autenticado. Rol:', userRole);
         } catch (err) {
-            // Token inválido o expirado
+            console.error('[middleware] Token inválido o expirado:', err);
             isAuthenticated = false;
         }
     }
 
-    // Redirigir usuarios autenticados que intentan acceder a rutas de auth
+    // Definir rutas públicas (auth)
     const authRoutes = ['/login', '/register', '/forgotpassword'];
     const isAuthRoute = authRoutes.some(route => pathname.startsWith(route));
 
+    // CASO 1: Usuario autenticado intenta acceder a rutas de auth
     if (isAuthenticated && isAuthRoute) {
+        console.log('[middleware] Usuario autenticado intentando acceder a auth, redirigiendo según rol');
         // Redirigir según el rol del usuario
         if (userRole === 'admin' || userRole === 'sucursal') {
             return NextResponse.redirect(new URL('/admin', request.url));
@@ -38,44 +43,38 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // Proteger rutas de admin
+    // CASO 2: Proteger rutas de ADMIN (solo admin y sucursal)
     if (pathname.startsWith('/admin')) {
-        if (!token) {
+        if (!isAuthenticated) {
+            console.log('[middleware] No autenticado, redirigiendo a /login');
             return NextResponse.redirect(new URL('/login', request.url));
         }
 
-        console.log('[middleware] Token recibido:', token?.substring(0, 50) + '...');
-        console.log('[middleware] Secret usado:', secretString?.substring(0, 10) + '...');
-
-        // Decodifica sin verificar para ver el contenido
-        const parts = token.split('.');
-        if (parts.length === 3) {
-            const header = JSON.parse(atob(parts[0]));
-            const payload = JSON.parse(atob(parts[1]));
-            console.log('[middleware] Header:', header);
-            console.log('[middleware] Payload:', payload);
+        // Verificar que sea admin o sucursal
+        if (userRole !== 'admin' && userRole !== 'sucursal') {
+            console.log('[middleware] Usuario sin permisos de admin, redirigiendo a /inicio');
+            return NextResponse.redirect(new URL('/inicio', request.url));
         }
 
-        try {
-            // Verifica con el mismo algoritmo que jsonwebtoken
-            const { payload } = await jwtVerify(token, jwtSecret, {
-                algorithms: ['HS256']
-            });
+        console.log('[middleware] Acceso permitido a /admin');
+        return NextResponse.next();
+    }
 
-            console.log('[middleware] JWT verified successfully');
-
-            const role = (payload as { role?: string }).role;
-
-            // Permitir acceso tanto a admin como a sucursal
-            if (role !== 'admin' && role !== 'sucursal') {
-                return NextResponse.redirect(new URL('/inicio', request.url));
-            }
-
-            return NextResponse.next();
-        } catch (err) {
-            console.error('[middleware] JWT verification failed:', err);
+    // CASO 3: Proteger rutas de CLIENTE (solo clientes autenticados)
+    if (pathname.startsWith('/inicio') || pathname.startsWith('/operacion') || pathname.startsWith('/mis-movimientos')) {
+        if (!isAuthenticated) {
+            console.log('[middleware] No autenticado, redirigiendo a /login');
             return NextResponse.redirect(new URL('/login', request.url));
         }
+
+        // Verificar que NO sea admin o sucursal (solo clientes)
+        if (userRole === 'admin' || userRole === 'sucursal') {
+            console.log('[middleware] Admin/Sucursal intentando acceder a rutas de cliente, redirigiendo a /admin');
+            return NextResponse.redirect(new URL('/admin', request.url));
+        }
+
+        console.log('[middleware] Acceso permitido a ruta de cliente');
+        return NextResponse.next();
     }
 
     return NextResponse.next();
@@ -83,8 +82,17 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
     matcher: [
+        // Rutas de admin
         '/admin',
         '/admin/:path*',
+        // Rutas de cliente
+        '/inicio',
+        '/inicio/:path*',
+        '/operacion',
+        '/operacion/:path*',
+        '/mis-movimientos',
+        '/mis-movimientos/:path*',
+        // Rutas de autenticación
         '/login',
         '/register',
         '/forgotpassword',

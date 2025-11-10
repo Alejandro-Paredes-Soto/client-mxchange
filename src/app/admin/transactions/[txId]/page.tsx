@@ -200,7 +200,7 @@ export default function AdminTransactionDetail() {
       <div className="mb-6">
         <div className="flex sm:flex-row flex-col justify-between items-start gap-3 mb-3">
           <div className="flex-1">
-            <h1 className="mb-2 font-bold text-3xl tracking-tight">Detalle de Transacción</h1>
+            <h1 className="mb-2 font-bold text-primary text-3xl tracking-tight">Detalle de Transacción</h1>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 text-muted-foreground text-sm">
                 <Hash className="w-4 h-4" />

@@ -46,7 +46,9 @@ function CheckoutInner({ amount, currency = "MXN", description, transaction_code
       'invalid_expiry_year': 'El año de vencimiento es inválido.',
       'invalid_expiry_month': 'El mes de vencimiento es inválido.',
       'No se pudo crear el método de pago': 'No se pudo crear el método de pago. Verifica los datos de tu tarjeta.',
-      'Error procesando el pago': 'Error al procesar el pago. Por favor, verifica los datos e intenta nuevamente.'
+      'Error procesando el pago': 'Error al procesar el pago. Por favor, verifica los datos e intenta nuevamente.',
+      'Solo se aceptan tarjetas de débito o prepagadas': '❌ Solo se aceptan tarjetas de débito o prepagadas',
+      'Por políticas de la plataforma, no aceptamos tarjetas de crédito': 'Por políticas de la plataforma, no aceptamos tarjetas de crédito. Por favor, utiliza una tarjeta de débito.',
     };
 
     // Buscar traducciones exactas
@@ -110,8 +112,12 @@ function CheckoutInner({ amount, currency = "MXN", description, transaction_code
       // Extraer mensaje de error más detallado
       let errorMsg = "Error procesando el pago";
       
+      // Verificar si es el error específico de tarjeta de crédito no permitida
+      if (e?.response?.data?.error?.code === 'card_type_not_allowed') {
+        errorMsg = e.response.data.details || e.response.data.message || "Solo se aceptan tarjetas de débito o prepagadas";
+      }
       // Primero intentar obtener el mensaje del error
-      if (e?.message && e.message !== "Error procesando el pago") {
+      else if (e?.message && e.message !== "Error procesando el pago") {
         errorMsg = e.message;
       } else if (e?.error?.details) {
         errorMsg = e.error.details;

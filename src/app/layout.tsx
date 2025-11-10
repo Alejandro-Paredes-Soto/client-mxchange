@@ -20,7 +20,7 @@ export default function RootLayout({
           toastOptions={{ duration: 4000 }}
           expand={true}
           closeButton
-          theme="dark"
+          theme="light"
           
         />
       </body>

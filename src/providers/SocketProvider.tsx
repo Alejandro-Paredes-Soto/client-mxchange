@@ -183,9 +183,21 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     s.on('notifications', onNotificationsArray);
 
     // Escuchar actualizaciones de inventario a nivel global y mostrar toast cuando venga desde el server
+    // SOLO para admins y sucursales, NO para usuarios regulares (ellos reciben su notificación específica)
     const onInventoryUpdated = (payload: unknown) => {
       try {
         console.log('inventory.updated global recibido en SocketProvider:', payload);
+        
+        // Obtener el rol actual
+        const { role } = getSessionInfo();
+        
+        // Si es un usuario regular (cliente), ignorar este evento
+        // Los clientes reciben su notificación específica vía el evento 'notification'
+        if (role !== 'admin' && role !== 'sucursal') {
+          console.log('inventory.updated ignorado para usuario regular (cliente)');
+          return;
+        }
+        
         if (payload && typeof payload === 'object') {
           const p = payload as any;
           const tx = p.transaction;

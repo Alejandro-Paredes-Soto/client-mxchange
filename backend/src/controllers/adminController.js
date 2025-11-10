@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const emailService = require('../services/emailService');
 
 const getInventory = async (req, res, next) => {
   try {
@@ -161,6 +162,17 @@ const changeTransactionStatus = async (req, res, next) => {
           } catch (insErr) {
             console.warn('No se pudo guardar notificación de usuario:', insErr && insErr.message ? insErr.message : insErr);
           }
+          
+          // Enviar email al usuario
+          try {
+            const [userRows] = await connection.query('SELECT email FROM users WHERE idUser = ?', [tx.user_id]);
+            if (userRows && userRows[0] && userRows[0].email) {
+              await emailService.sendTransactionCancelledEmail(userRows[0].email, { transaction_code: tx.transaction_code, status });
+            }
+          } catch (emailErr) {
+            console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
+          }
+          
           if (global && global.io) {
             try {
               global.io.to(`user:${tx.user_id}`).emit('notification', {
@@ -224,6 +236,17 @@ const changeTransactionStatus = async (req, res, next) => {
           } catch (insErr) {
             console.warn('No se pudo guardar notificación de usuario:', insErr && insErr.message ? insErr.message : insErr);
           }
+          
+          // Enviar email al usuario
+          try {
+            const [userRows] = await connection.query('SELECT email FROM users WHERE idUser = ?', [tx.user_id]);
+            if (userRows && userRows[0] && userRows[0].email) {
+              await emailService.sendPaymentConfirmedEmail(userRows[0].email, { transaction_code: tx.transaction_code });
+            }
+          } catch (emailErr) {
+            console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
+          }
+          
           if (global && global.io) {
             try {
               global.io.to(`user:${tx.user_id}`).emit('notification', {
@@ -405,6 +428,17 @@ const changeTransactionStatus = async (req, res, next) => {
           } catch (insErr) {
             console.warn('No se pudo guardar notificación de usuario:', insErr && insErr.message ? insErr.message : insErr);
           }
+          
+          // Enviar email al usuario
+          try {
+            const [userRows] = await pool.query('SELECT email FROM users WHERE idUser = ?', [tx.user_id]);
+            if (userRows && userRows[0] && userRows[0].email) {
+              await emailService.sendTransactionReadyEmail(userRows[0].email, { ...tx, status });
+            }
+          } catch (emailErr) {
+            console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
+          }
+          
           if (global && global.io) {
             try {
               global.io.to(`user:${tx.user_id}`).emit('notification', {

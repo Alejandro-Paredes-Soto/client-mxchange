@@ -15,7 +15,7 @@ export default function TransactionLookupPage() {
 
   return (
     <div className="mx-auto p-6 max-w-2xl">
-      <h1 className="mb-4 font-bold text-2xl">Buscar transacción por código</h1>
+      <h1 className="mb-4 font-bold text-primary text-2xl">Buscar transacción por código</h1>
       <p className="mb-4 text-gray-600">Ingresa el código de la transacción para ver su información detallada.</p>
 
       <div className="flex gap-2">

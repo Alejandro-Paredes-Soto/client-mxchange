@@ -1,6 +1,7 @@
 const { stripe, configured, publicKey } = require('../config/stripe');
 const pool = require('../config/db');
 const crypto = require('crypto');
+const emailService = require('../services/emailService');
 
 /**
  * Devuelve la clave pública de Stripe para el frontend
@@ -416,6 +417,16 @@ async function updateTransactionToPaid(txId, txCode) {
         ]
       );
 
+      // Enviar email al usuario
+      try {
+        const [userRows] = await pool.query('SELECT email FROM users WHERE idUser = ?', [txInfo.user_id]);
+        if (userRows && userRows[0] && userRows[0].email) {
+          await emailService.sendPaymentConfirmedEmail(userRows[0].email, { transaction_code: txInfo.transaction_code });
+        }
+      } catch (emailErr) {
+        console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
+      }
+
       if (global && global.io) {
         global.io.to(`user:${txInfo.user_id}`).emit('notification', {
           title: 'Pago confirmado',
@@ -559,6 +570,16 @@ async function handlePaymentFailed(paymentIntent) {
             ]
           );
 
+          // Enviar email al usuario
+          try {
+            const [userRows] = await pool.query('SELECT email FROM users WHERE idUser = ?', [userId]);
+            if (userRows && userRows[0] && userRows[0].email) {
+              await emailService.sendPaymentFailedEmail(userRows[0].email, { transaction_code: txCode });
+            }
+          } catch (emailErr) {
+            console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
+          }
+
           if (global && global.io) {
             global.io.to(`user:${userId}`).emit('notification', {
               title: 'Pago rechazado',
@@ -661,6 +682,38 @@ const charge = async (req, res, next) => {
     if (!payment_method_id) {
       return res.status(400).json({
         message: 'Falta payment_method_id. Crea el método con Stripe.js en el frontend y envíalo al backend.'
+      });
+    }
+
+    // 3. Obtener información del PaymentMethod para validar el tipo de tarjeta
+    let paymentMethod;
+    try {
+      paymentMethod = await stripe.paymentMethods.retrieve(payment_method_id);
+      console.log('PaymentMethod recuperado:', paymentMethod.id, 'Tipo de tarjeta:', paymentMethod.card?.funding);
+
+      // VALIDACIÓN: Solo aceptar tarjetas de débito o prepagadas
+      if (paymentMethod.card && paymentMethod.card.funding === 'credit') {
+        console.warn('❌ Tarjeta de crédito rechazada:', paymentMethod.card.brand, paymentMethod.card.last4);
+        return res.status(400).json({
+          message: 'Solo se aceptan tarjetas de débito o prepagadas',
+          details: 'Por políticas de la plataforma, no aceptamos tarjetas de crédito. Por favor, utiliza una tarjeta de débito.',
+          error: {
+            code: 'card_type_not_allowed',
+            type: 'validation_error',
+            funding: paymentMethod.card.funding
+          }
+        });
+      }
+
+      // Log para tarjetas aceptadas
+      if (paymentMethod.card) {
+        console.log('✓ Tarjeta aceptada:', paymentMethod.card.brand, paymentMethod.card.last4, 'Tipo:', paymentMethod.card.funding);
+      }
+    } catch (pmErr) {
+      console.error('Error recuperando PaymentMethod:', pmErr);
+      return res.status(422).json({
+        message: 'Error validando método de pago',
+        details: pmErr.message
       });
     }
 
@@ -786,6 +839,16 @@ const charge = async (req, res, next) => {
               'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
               ['user', txInfo.user_id, null, 'Pago confirmado', `Tu pago para la operación ${txInfo.transaction_code} ha sido confirmado exitosamente.`, 'payment_confirmed', txInfo.id]
             );
+            
+            // Enviar email al usuario
+            try {
+              const [userRows] = await pool.query('SELECT email FROM users WHERE idUser = ?', [txInfo.user_id]);
+              if (userRows && userRows[0] && userRows[0].email) {
+                await emailService.sendPaymentConfirmedEmail(userRows[0].email, { transaction_code: txInfo.transaction_code });
+              }
+            } catch (emailErr) {
+              console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
+            }
             
             if (global && global.io) {
               global.io.to(`user:${txInfo.user_id}`).emit('notification', {

@@ -40,10 +40,24 @@ const register = async (req, res, next) => {
     if (!name || !email || !password) return res.status(400).json({ message: 'name, email and password required' });
 
     const existing = await userModel.findByEmail(email);
-    if (existing) return res.status(409).json({ message: 'Email already in use' });
+    if (existing) {
+      // Verificar el método de autenticación usado
+      const authMethod = existing.auth_provider || 'email';
+      if (authMethod === 'google') {
+        return res.status(409).json({ 
+          message: 'Este correo ya está registrado con Google. Por favor, inicia sesión con Google.',
+          authProvider: 'google'
+        });
+      } else {
+        return res.status(409).json({ 
+          message: 'Este correo ya está registrado. Por favor, inicia sesión con tu correo y contraseña.',
+          authProvider: 'email'
+        });
+      }
+    }
 
     const hashed = await bcrypt.hash(password, 10);
-    const user = await userModel.createUser({ name, email, password: hashed });
+    const user = await userModel.createUser({ name, email, password: hashed, auth_provider: 'email' });
 
     const userId = user.idUser || user.id;
     const branchId = user.branch_id || null;
@@ -64,7 +78,7 @@ const loginGoogle = async (req, res, next) => {
     if (!email || !name) return res.status(400).json({ message: 'Email and name required' });
 
     let user = await userModel.findByEmail(email);
-    console.log('🔍 Usuario encontrado en Google Login:', user ? { id: user.idUser || user.id, email: user.email, active: user.active } : 'No encontrado');
+    console.log('🔍 Usuario encontrado en Google Login:', user ? { id: user.idUser || user.id, email: user.email, active: user.active, auth_provider: user.auth_provider } : 'No encontrado');
     
     // Si el usuario no existe, lo creamos
     if (!user) {
@@ -72,8 +86,18 @@ const loginGoogle = async (req, res, next) => {
       // Generar una contraseña temporal para usuarios de Google
       const tempPassword = Math.random().toString(36).substring(2, 15);
       const hashed = await bcrypt.hash(tempPassword, 10);
-      user = await userModel.createUser({ name, email, password: hashed });
+      user = await userModel.createUser({ name, email, password: hashed, auth_provider: 'google' });
       console.log('✅ Usuario creado:', { id: user.idUser || user.id, email: user.email });
+    } else {
+      // Si el usuario existe pero se registró con email/password
+      const authMethod = user.auth_provider || 'email';
+      if (authMethod === 'email') {
+        console.log('❌ Usuario intentó login con Google pero se registró con email/password');
+        return res.status(409).json({ 
+          message: 'Este correo está registrado con email y contraseña. Por favor, inicia sesión con tu correo y contraseña.',
+          authProvider: 'email'
+        });
+      }
     }
 
     // Verificar si el usuario existe después de la creación

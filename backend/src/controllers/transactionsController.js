@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const emailService = require('../services/emailService');
 
 // Genera un código único corto para la transacción
 function generateTransactionCode() {
@@ -297,6 +298,16 @@ const createTransaction = async (req, res, next) => {
             );
           } catch (insUserErr) {
             console.warn('No se pudo guardar notificación de usuario:', insUserErr && insUserErr.message ? insUserErr.message : insUserErr);
+          }
+          
+          // Enviar email al usuario
+          try {
+            const [userRows] = await pool.query('SELECT email FROM users WHERE idUser = ?', [userId]);
+            if (userRows && userRows[0] && userRows[0].email) {
+              await emailService.sendTransactionCreatedEmail(userRows[0].email, tx);
+            }
+          } catch (emailErr) {
+            console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
           }
           
           try {

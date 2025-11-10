@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import useUtils from "../../services/utils";
 import { signIn } from "next-auth/react";
 import Cookies from 'js-cookie';
+import { toast } from "sonner";
 
 type OperationType = "buyUsd" | "sellUsd" | "buyMxn" | "sellMxn";
 
@@ -142,6 +143,7 @@ const useLogin = () => {
       const token = response.data?.token;
       if (token) Cookies.set('token', token, { path: '/' });
       const user = response.data?.user;
+      toast.success("¡Bienvenido de nuevo!");
       // Redirigir a admin si es admin o sucursal
       if (user?.role === 'admin' || user?.role === 'sucursal') {
         window.location.href = "/admin";
@@ -152,8 +154,10 @@ const useLogin = () => {
       setLoadingLogin(false);
     }
 
-     } catch (error) {
+     } catch (error: any) {
         setLoadingLogin(false);
+        const errorMessage = error?.response?.data?.message || 'Error al iniciar sesión. Verifica tus credenciales.';
+        toast.error(errorMessage);
         return;
      }
   }
@@ -171,6 +175,7 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
          const tokenFromRegister = response.data?.token;
          if (tokenFromRegister) {
            Cookies.set('token', tokenFromRegister);
+           toast.success("¡Registro exitoso! Bienvenido a MXange");
            setLoadingRegister(false);
            window.location.href = "/inicio";
            return;
@@ -182,36 +187,68 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
            if (loginResp?.status === 200) {
              const token = loginResp.data?.token;
              if (token) Cookies.set('token', token);
+             toast.success("¡Registro exitoso! Bienvenido a MXange");
              setLoadingRegister(false);
              window.location.href = "/inicio";
              return;
            }
          } catch (loginError) {
            // If auto-login fails, keep the user on the page and show a message
-           alert("Registro exitoso pero no se pudo iniciar sesión automáticamente. Por favor inicia sesión.");
+           toast.warning("Registro exitoso pero no se pudo iniciar sesión automáticamente. Por favor inicia sesión.");
            console.error(loginError);
          }
 
          setLoadingRegister(false);
        }
 
-     } catch (error) {
+     } catch (error: any) {
         setLoadingRegister(false);
         console.error(error);
-        alert('Error al registrar. Inténtalo de nuevo.');
+        const errorMessage = error?.response?.data?.message || 'Error al registrar. Inténtalo de nuevo.';
+        const authProvider = error?.response?.data?.authProvider;
+        
+        // Mostrar mensaje específico según el proveedor de autenticación
+        if (authProvider === 'google') {
+          toast.error(errorMessage, {
+            description: "Usa el botón 'Continuar con Google' para iniciar sesión."
+          });
+        } else if (authProvider === 'email') {
+          toast.error(errorMessage, {
+            description: "Usa el formulario de inicio de sesión con tu correo y contraseña."
+          });
+        } else {
+          toast.error(errorMessage);
+        }
         return;
      }
   }
 
 
   const handleLoginGoogle = async () => {
+    try {
       setLoadingGoogle(true);
-    document.cookie = "mode=login; path=/";
+      document.cookie = "mode=login; path=/";
+      
+      // Establecer la bandera en localStorage para que inicio/page.tsx sepa que es login de Google
+      localStorage.setItem("authGoogle", "true");
 
-    await signIn("google");
-    setLoadingGoogle(true);
+      await signIn("google");
+      setLoadingGoogle(true);
 
-    Cookies.set("authGoogle", "true");
+      Cookies.set("authGoogle", "true");
+    } catch (error: any) {
+      setLoadingGoogle(false);
+      const errorMessage = error?.response?.data?.message || 'Error al iniciar sesión con Google.';
+      const authProvider = error?.response?.data?.authProvider;
+      
+      if (authProvider === 'email') {
+        toast.error(errorMessage, {
+          description: "Usa el formulario de inicio de sesión con tu correo y contraseña."
+        });
+      } else {
+        toast.error(errorMessage);
+      }
+    }
   }
 
    return {
