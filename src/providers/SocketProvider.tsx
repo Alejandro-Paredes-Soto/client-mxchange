@@ -144,9 +144,28 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return;
         }
         recentKeysRef.current.set(key, now);
-        toast.info(payload.title || 'Notificación', {
-          description: payload.message || '',
-        });
+        
+        // Mostrar notificación según el tipo
+        if (payload.event_type === 'low_inventory') {
+          // Alerta de inventario bajo - usar toast de advertencia o error
+          const isCritical = payload.title?.includes('CRÍTICO');
+          if (isCritical) {
+            toast.error(payload.title || 'Inventario Crítico', {
+              description: payload.message || '',
+              duration: 10000, // 10 segundos para crítico
+            });
+          } else {
+            toast.warning(payload.title || 'Inventario Bajo', {
+              description: payload.message || '',
+              duration: 8000, // 8 segundos para bajo
+            });
+          }
+        } else {
+          toast.info(payload.title || 'Notificación', {
+            description: payload.message || '',
+          });
+        }
+        
         setNotifications(prev => [{ ...payload, read: false }, ...prev].slice(0, 100));
       } catch (err) {
         console.log('Notification error:', err, payload);

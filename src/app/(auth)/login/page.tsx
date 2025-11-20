@@ -2,16 +2,20 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import useUtils from "../../services/utils";
 import useLogin from "./useLogin";
 import { getRates } from '../../services/api';
 import { FcGoogle } from "react-icons/fc";
 import { MdAutorenew } from "react-icons/md";
 import { NumberInput } from '@/components/ui/number-input';
+import { toast } from "sonner";
 
 
 const Login = () => {
 
+  const searchParams = useSearchParams();
+  
   const { activeForm,
     loadingLogin,
     loadingGoogle,
@@ -29,6 +33,29 @@ const Login = () => {
   const [operation, setOperation] = useState('buyUsd');
   const [inputAmount, setInputAmount] = useState('1000');
   const [outputAmount, setOutputAmount] = useState(0);
+
+  // Detectar errores de OAuth en la URL
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (error) {
+      if (error === 'REGISTRATION_REQUIRED') {
+        toast.error("No tienes una cuenta registrada", {
+          description: "Por favor regístrate primero usando el botón de Registrarse."
+        });
+        setActiveForm("register");
+      } else if (error === 'EMAIL_PASSWORD_ACCOUNT') {
+        toast.error("Esta cuenta usa email y contraseña", {
+          description: "Por favor, inicia sesión con tu correo y contraseña."
+        });
+      } else {
+        toast.error("Error al iniciar sesión con Google", {
+          description: error
+        });
+      }
+      // Limpiar el parámetro de error de la URL
+      window.history.replaceState({}, '', '/login');
+    }
+  }, [searchParams, setActiveForm]);
 
   useEffect(() => {
     const loadRates = async () => {

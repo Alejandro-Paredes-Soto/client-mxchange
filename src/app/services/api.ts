@@ -157,6 +157,7 @@ export type AdminInventoryItem = {
     branch_name?: string;
     currency: string;
     amount: number;
+    reserved_amount?: number;
     low_stock_threshold?: number;
     stock_status?: string;
     last_updated?: string;

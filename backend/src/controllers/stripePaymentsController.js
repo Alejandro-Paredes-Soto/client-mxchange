@@ -227,25 +227,35 @@ const webhook = async (req, res, next) => {
 
   const sig = req.headers['stripe-signature'];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  
+  // TEMPORAL: Para desarrollo, deshabilitar verificación de firma
+  const skipSignatureVerification = process.env.NODE_ENV !== 'production';
 
   let event;
 
   try {
     // Verificar la firma del webhook si tenemos el secret
     // req.body debe ser el raw buffer (configurado con express.raw en la ruta)
-    if (endpointSecret) {
+    if (endpointSecret && !skipSignatureVerification) {
       // Stripe requiere el raw body como string o Buffer
       const payload = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body;
+      console.log('🔐 Verificando firma del webhook con secret:', endpointSecret.substring(0, 10) + '...');
       event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+      console.log('✅ Firma verificada correctamente');
     } else {
       // En desarrollo, podemos procesar sin verificar
-      console.warn('⚠ STRIPE_WEBHOOK_SECRET no configurado. Procesando webhook sin verificación (solo para desarrollo)');
+      if (skipSignatureVerification) {
+        console.warn('⚠️ Modo desarrollo: Procesando webhook SIN verificación de firma');
+      } else {
+        console.warn('⚠ STRIPE_WEBHOOK_SECRET no configurado. Procesando webhook sin verificación (solo para desarrollo)');
+      }
       // Si req.body es un Buffer, parsearlo a JSON
       const payload = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
       event = payload;
     }
   } catch (err) {
-    console.error('Error verificando webhook de Stripe:', err.message);
+    console.error('❌ Error verificando webhook de Stripe:', err.message);
+    console.error('Detalles del error:', err);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -817,11 +827,9 @@ const charge = async (req, res, next) => {
             ['paid', txInfo.id]
           );
           
-          // Marcar reserva de inventario como committed
-          await pool.query(
-            'UPDATE inventory_reservations SET status = ?, committed_at = NOW() WHERE transaction_id = ? AND status = ?',
-            ['committed', txInfo.id, 'reserved']
-          );
+          // NOTA: NO marcar la reserva como committed aquí.
+          // La reserva se marcará como committed cuando se complete la transacción (estado 'completed')
+          // y ahí es cuando se ajustará el inventario real.
           
           // Emitir evento de actualización de transacción
           if (global && global.io) {

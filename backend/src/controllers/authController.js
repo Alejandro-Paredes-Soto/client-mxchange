@@ -80,30 +80,23 @@ const loginGoogle = async (req, res, next) => {
     let user = await userModel.findByEmail(email);
     console.log('🔍 Usuario encontrado en Google Login:', user ? { id: user.idUser || user.id, email: user.email, active: user.active, auth_provider: user.auth_provider } : 'No encontrado');
     
-    // Si el usuario no existe, lo creamos
+    // Si el usuario no existe, NO lo creamos - debe registrarse primero
     if (!user) {
-      console.log('📝 Creando nuevo usuario para Google Login...');
-      // Generar una contraseña temporal para usuarios de Google
-      const tempPassword = Math.random().toString(36).substring(2, 15);
-      const hashed = await bcrypt.hash(tempPassword, 10);
-      user = await userModel.createUser({ name, email, password: hashed, auth_provider: 'google' });
-      console.log('✅ Usuario creado:', { id: user.idUser || user.id, email: user.email });
-    } else {
-      // Si el usuario existe pero se registró con email/password
-      const authMethod = user.auth_provider || 'email';
-      if (authMethod === 'email') {
-        console.log('❌ Usuario intentó login con Google pero se registró con email/password');
-        return res.status(409).json({ 
-          message: 'Este correo está registrado con email y contraseña. Por favor, inicia sesión con tu correo y contraseña.',
-          authProvider: 'email'
-        });
-      }
+      console.log('❌ Usuario no encontrado - debe registrarse');
+      return res.status(404).json({ 
+        message: 'No tienes una cuenta registrada. Por favor regístrate primero.',
+        requiresRegistration: true
+      });
     }
-
-    // Verificar si el usuario existe después de la creación
-    if (!user) {
-      console.log('❌ Error: Usuario sigue siendo null después de creación');
-      return res.status(500).json({ message: 'Failed to create or find user' });
+    
+    // Si el usuario existe pero se registró con email/password
+    const authMethod = user.auth_provider || 'email';
+    if (authMethod === 'email') {
+      console.log('❌ Usuario intentó login con Google pero se registró con email/password');
+      return res.status(409).json({ 
+        message: 'Este correo está registrado con email y contraseña. Por favor, inicia sesión con tu correo y contraseña.',
+        authProvider: 'email'
+      });
     }
 
     // Verificar si el usuario está activo (solo si la propiedad existe)

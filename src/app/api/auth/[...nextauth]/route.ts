@@ -22,10 +22,7 @@ const handler = NextAuth({
 
   callbacks: {
     async signIn({ user }) {
-      // const cookieStore = cookies();
-      // const mode = (await cookieStore).get("mode")?.value;
-
-      // if (mode && mode == "login") {
+      try {
         const resp = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/user/loginGoogle`,
           {
@@ -50,17 +47,24 @@ const handler = NextAuth({
           );
 
           (user as any).idUser = Number(data.data.idUser.toString());
-          // (user as any).jwt = token;
           (user as any).token = data.data.token;
           (user as any).rol = "customer";
           (user as any).idValidToken = isValidToken;
           return true;
+        } else if (status == 404 && data.requiresRegistration) {
+          // Usuario no existe - debe registrarse
+          // Retornar false hará que NextAuth redirija a /login con ?error=
+          return "/login?error=REGISTRATION_REQUIRED";
+        } else if (status == 409 && data.authProvider === 'email') {
+          // Usuario registrado con email/password
+          return "/login?error=EMAIL_PASSWORD_ACCOUNT";
         } else {
-          throw new Error(data?.data.message || "Error interno del servidor");
+          return Promise.reject(new Error(data?.message || "Error interno del servidor"));
         }
-   //   }
-
-      return false;
+      } catch (error: any) {
+        // Propagar el error específico para manejarlo en el frontend
+        return Promise.reject(error);
+      }
     },
 
     async jwt({ token, user }) {

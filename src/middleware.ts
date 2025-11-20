@@ -1,17 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
+import { getToken } from 'next-auth/jwt';
+
 const secretString = process.env.JWT_SECRET || 'your_jwt_secret_key';
 const jwtSecret = new TextEncoder().encode(secretString);
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const token = request.cookies.get('token')?.value;
+    
+    // También verificar sesión de NextAuth (Google OAuth)
+    const nextAuthToken = await getToken({ 
+        req: request, 
+        secret: process.env.NEXTAUTH_SECRET 
+    });
 
     console.log('[middleware] Pathname:', pathname);
+
+    // Permitir rutas de NextAuth sin interceptar
+    if (pathname.startsWith('/api/auth')) {
+        return NextResponse.next();
+    }
 
     // Verificar si el usuario está autenticado y obtener su rol
     let isAuthenticated = false;
     let userRole: string | undefined;
+
+    // Primero verificar token de NextAuth (Google OAuth)
+    if (nextAuthToken) {
+        isAuthenticated = true;
+        userRole = (nextAuthToken as any).rol || 'client';
+        console.log('[middleware] Usuario autenticado con NextAuth. Rol:', userRole);
+    }
+    // Si no, verificar token normal (email/password)
+    else if (token) {
+        try {
+            const { payload } = await jwtVerify(token, jwtSecret, {
+                algorithms: ['HS256']
+            });
+            isAuthenticated = true;
+            userRole = (payload as { role?: string }).role;
+            console.log('[middleware] Usuario autenticado con token. Rol:', userRole);
+        } catch (err) {
+            console.error('[middleware] Token inválido o expirado:', err);
+            isAuthenticated = false;
+        }
+    }
 
     if (token) {
         try {

@@ -5,6 +5,7 @@ import useUtils from "../../services/utils";
 import { signIn } from "next-auth/react";
 import Cookies from 'js-cookie';
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 type OperationType = "buyUsd" | "sellUsd" | "buyMxn" | "sellMxn";
 
@@ -17,6 +18,7 @@ interface Rates {
 
 const useLogin = () => {
     const { requestPost } = useUtils();
+    const router = useRouter();
    const [activeForm, setActiveForm] = useState<"login" | "register">("login");
 
      const [rates, setRates] = useState<Rates>({
@@ -227,27 +229,18 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
   const handleLoginGoogle = async () => {
     try {
       setLoadingGoogle(true);
-      document.cookie = "mode=login; path=/";
       
       // Establecer la bandera en localStorage para que inicio/page.tsx sepa que es login de Google
       localStorage.setItem("authGoogle", "true");
 
-      await signIn("google");
-      setLoadingGoogle(true);
-
-      Cookies.set("authGoogle", "true");
+      // Dejar que NextAuth maneje la redirección automáticamente
+      await signIn("google", { callbackUrl: "/inicio" });
+      
     } catch (error: any) {
       setLoadingGoogle(false);
-      const errorMessage = error?.response?.data?.message || 'Error al iniciar sesión con Google.';
-      const authProvider = error?.response?.data?.authProvider;
-      
-      if (authProvider === 'email') {
-        toast.error(errorMessage, {
-          description: "Usa el formulario de inicio de sesión con tu correo y contraseña."
-        });
-      } else {
-        toast.error(errorMessage);
-      }
+      const errorMessage = error?.message || 'Error al iniciar sesión con Google.';
+      toast.error(errorMessage);
+      localStorage.removeItem("authGoogle");
     }
   }
 
