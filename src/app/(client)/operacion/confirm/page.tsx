@@ -291,7 +291,7 @@ const ConfirmPage = () => {
               <div className="flex sm:flex-row flex-col justify-between items-center gap-8">
                 <div className="flex-1 sm:text-left text-center">
                   <div className="mb-3 font-medium text-muted-foreground text-sm">Tú {fromLabel}</div>
-                  <div className="mb-2 font-bold text-4xl">${tx.amountFrom.toFixed(2)}</div>
+                  <div className="mb-2 font-bold text-4xl">${fromCurrency === 'MXN' ? tx.amountFrom.toFixed(0) : tx.amountFrom.toFixed(2)}</div>
                   <div className="font-semibold text-lg">{fromCurrency}</div>
                 </div>
 
@@ -299,7 +299,7 @@ const ConfirmPage = () => {
 
                 <div className="flex-1 text-center sm:text-right">
                   <div className="mb-3 font-medium text-muted-foreground text-sm">Tú {toLabel}</div>
-                  <div className="mb-2 font-bold text-4xl">${tx.amountTo.toFixed(2)}</div>
+                  <div className="mb-2 font-bold text-4xl">${toCurrency === 'MXN' ? tx.amountTo.toFixed(0) : tx.amountTo.toFixed(2)}</div>
                   <div className="font-semibold text-lg">{toCurrency}</div>
                 </div>
               </div>
@@ -316,7 +316,7 @@ const ConfirmPage = () => {
               </div>
               <div className="space-y-1">
                 <div className="font-medium text-muted-foreground text-xs">Comisión</div>
-                <div className="font-semibold text-base">{tx.commissionPercent ? `${tx.commissionPercent.toFixed(2)}% ($${tx.commissionAmount?.toFixed(2)} MXN)` : '—'}</div>
+                <div className="font-semibold text-base">{tx.commissionPercent ? `${tx.commissionPercent.toFixed(2)}% ($${tx.commissionAmount?.toFixed(0)} MXN)` : '—'}</div>
               </div>
               <div className="space-y-1">
                 <div className="font-medium text-muted-foreground text-xs">Sucursal</div>

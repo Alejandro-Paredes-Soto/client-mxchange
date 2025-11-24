@@ -201,69 +201,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     s.on('notifications', onNotificationsArray);
 
-    // Escuchar actualizaciones de inventario a nivel global y mostrar toast cuando venga desde el server
-    // SOLO para admins y sucursales, NO para usuarios regulares (ellos reciben su notificación específica)
+    // Escuchar actualizaciones de inventario a nivel global
+    // Este evento es principalmente para actualizar la UI en tiempo real (dashboard, inventario)
+    // NO muestra notificaciones toast porque las notificaciones específicas llegan vía 'notification'
     const onInventoryUpdated = (payload: unknown) => {
       try {
         console.log('inventory.updated global recibido en SocketProvider:', payload);
-        
-        // Obtener el rol actual
-        const { role } = getSessionInfo();
-        
-        // Si es un usuario regular (cliente), ignorar este evento
-        // Los clientes reciben su notificación específica vía el evento 'notification'
-        if (role !== 'admin' && role !== 'sucursal') {
-          console.log('inventory.updated ignorado para usuario regular (cliente)');
-          return;
-        }
-        
-        if (payload && typeof payload === 'object') {
-          const p = payload as any;
-          const tx = p.transaction;
-          const inv = p.inventory;
-          const branchName = p.branch_name || p.branch || `Sucursal ${p.branch_id || ''}`;
-          if (tx && tx.transaction_code) {
-            const key = `tx:${tx.transaction_code}`;
-            const now = Date.now();
-            const last = recentKeysRef.current.get(key) || 0;
-            if (now - last < DEDUP_MS) {
-              console.log('inventory.updated duplicado ignorado por dedupe:', key);
-              return;
-            }
-            recentKeysRef.current.set(key, now);
-
-            // Construir título y mensaje legible
-            const title = tx.status === 'reserved' ? `Operación reservada: ${tx.transaction_code}` : `Inventario actualizado`;
-            const messageParts: string[] = [];
-            if (tx.amount_to && tx.currency_to) {
-              messageParts.push(`${tx.amount_to} ${tx.currency_to}`);
-            }
-            if (tx.amount_from && tx.currency_from) {
-              messageParts.push(`Pagos ${tx.amount_from} ${tx.currency_from}`);
-            }
-            if (branchName) messageParts.push(branchName);
-            const message = messageParts.join(' · ');
-
-            // Mostrar un único toast legible
-            toast.info(title || 'Inventario', { description: message });
-
-            // Añadir a la lista de notificaciones para el panel
-            const notif: AppNotification = {
-              title: title,
-              message: message,
-              event_type: 'inventory.updated',
-              transaction_id: tx.transaction_code || tx.id,
-              created_at: p.timestamp || tx.created_at || new Date().toISOString(),
-              read: false,
-            };
-            setNotifications(prev => [notif, ...prev].slice(0, 100));
-            return;
-          }
-        }
-
-        // Fallback genérico si no tiene transaction
-        const msg = JSON.stringify(payload || {});
-        toast('Inventario actualizado', { description: msg.slice(0, 500) });
+        // Solo registrar el evento, no mostrar toast ni añadir a notificaciones
+        // Las notificaciones específicas llegarán por el evento 'notification'
       } catch (err) {
         console.warn('Error manejando inventory.updated en SocketProvider:', err);
       }

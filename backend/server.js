@@ -2,6 +2,7 @@ require('dotenv').config();
 const app = require('./src/app');
 const http = require('http');
 const socketIo = require('socket.io');
+const expirationService = require('./src/services/expirationService');
 
 const PORT = process.env.PORT || 4000;
 
@@ -51,6 +52,30 @@ io.on('connection', (socket) => {
   });
 });
 
+// Iniciar el servicio de expiración automática
+console.log('🚀 Iniciando servicio de expiración de transacciones...');
+expirationService.start();
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Expiration service active - checking every 5 minutes`);
+});
+
+// Manejar cierre graceful del servidor
+process.on('SIGINT', () => {
+  console.log('\n🛑 Deteniendo servidor...');
+  expirationService.stop();
+  server.close(() => {
+    console.log('✅ Servidor cerrado');
+    process.exit(0);
+  });
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Deteniendo servidor...');
+  expirationService.stop();
+  server.close(() => {
+    console.log('✅ Servidor cerrado');
+    process.exit(0);
+  });
 });

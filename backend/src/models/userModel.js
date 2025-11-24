@@ -13,4 +13,9 @@ const createUser = async ({ name, email, password, role = 'client', branch_id = 
   return rows[0];
 };
 
-module.exports = { findByEmail, createUser };
+const updatePassword = async (email, hashedPassword) => {
+  const [result] = await pool.query('UPDATE users SET password = ? WHERE email = ?', [hashedPassword, email]);
+  return result.affectedRows > 0;
+};
+
+module.exports = { findByEmail, createUser, updatePassword };

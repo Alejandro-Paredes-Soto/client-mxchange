@@ -134,6 +134,10 @@ const updateInventory = async (req, res, next) => {
             created_at: new Date().toISOString()
           });
         }
+        
+        // Enviar emails a admins y usuarios de sucursal
+        console.log(`[updateInventory] Enviando email de alerta de inventario ${alertLevel} para ${currency} en ${branchName}`);
+        await emailService.sendLowInventoryAlert(branchId, branchName, currency, amount, finalThreshold, alertLevel);
       } catch (notifErr) {
         console.warn('Error enviando notificación de inventario bajo:', notifErr);
       }
@@ -485,6 +489,76 @@ const changeTransactionStatus = async (req, res, next) => {
                     }
                   }
                   console.log(`✓ Descontado ${txFull.amount_to} ${txFull.currency_to} de sucursal ${txFull.branch_id}`);
+                  
+                  // Verificar si el inventario quedó bajo después del descuento
+                  const [invAfterDeduct] = await connection.query(
+                    'SELECT i.amount, i.low_stock_threshold, b.name as branch_name FROM inventory i JOIN branches b ON i.branch_id = b.id WHERE i.branch_id = ? AND i.currency = ? LIMIT 1',
+                    [txFull.branch_id, txFull.currency_to]
+                  );
+                  
+                  if (invAfterDeduct && invAfterDeduct[0]) {
+                    const newAmount = Number(invAfterDeduct[0].amount);
+                    const threshold = Number(invAfterDeduct[0].low_stock_threshold || 1000);
+                    const branchName = invAfterDeduct[0].branch_name;
+                    
+                    console.log(`🔍 Verificación de inventario bajo: ${txFull.currency_to} en ${branchName} - Disponible: ${newAmount}, Umbral: ${threshold}`);
+                    
+                    const isLow = newAmount <= threshold;
+                    const isCritical = newAmount <= threshold * 0.5;
+                    
+                    if (isLow) {
+                      const alertLevel = isCritical ? 'CRÍTICO' : 'BAJO';
+                      const alertTitle = `Inventario ${alertLevel}: ${txFull.currency_to}`;
+                      const alertMessage = `La sucursal ${branchName} tiene inventario ${alertLevel.toLowerCase()} de ${txFull.currency_to}. Disponible: ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: txFull.currency_to }).format(newAmount)} (Umbral: ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: txFull.currency_to }).format(threshold)})`;
+                      
+                      console.log(`⚠️ Inventario ${alertLevel} detectado después de completar transacción`);
+                      
+                      try {
+                        // Notificación para admins
+                        await connection.query(
+                          'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+                          ['admin', null, txFull.branch_id, alertTitle, alertMessage, 'low_inventory', null]
+                        );
+                        
+                        // Notificación para usuarios de sucursal
+                        await connection.query(
+                          'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
+                          ['sucursal', null, txFull.branch_id, alertTitle, alertMessage, 'low_inventory', null]
+                        );
+                        
+                        // Emitir notificación en tiempo real
+                        if (global.io) {
+                          global.io.to('admins').emit('notification', {
+                            title: alertTitle,
+                            message: alertMessage,
+                            event_type: 'low_inventory',
+                            branch_id: txFull.branch_id,
+                            currency: txFull.currency_to,
+                            amount: newAmount,
+                            threshold: threshold,
+                            created_at: new Date().toISOString()
+                          });
+                          
+                          global.io.to(`branch:${txFull.branch_id}`).emit('notification', {
+                            title: alertTitle,
+                            message: alertMessage,
+                            event_type: 'low_inventory',
+                            branch_id: txFull.branch_id,
+                            currency: txFull.currency_to,
+                            amount: newAmount,
+                            threshold: threshold,
+                            created_at: new Date().toISOString()
+                          });
+                        }
+                        
+                        // Enviar emails a admins y usuarios de sucursal (no bloqueante)
+                        emailService.sendLowInventoryAlert(txFull.branch_id, branchName, txFull.currency_to, newAmount, threshold, alertLevel)
+                          .catch(err => console.warn('Error enviando email de alerta de inventario:', err));
+                      } catch (notifErr) {
+                        console.warn('Error enviando notificación de inventario bajo:', notifErr);
+                      }
+                    }
+                  }
                 }
               } catch (deductErr) {
                 console.error('Error descontando inventario al completar transacción:', deductErr && deductErr.message ? deductErr.message : deductErr);
@@ -1078,4 +1152,138 @@ const getTransactionDetails = async (req, res, next) => {
   }
 };
 
-module.exports = { getInventory, updateInventory, listAllTransactions, changeTransactionStatus, getDashboardKPIs, getDashboardChartData, getInventorySummary, getRecentTransactions, listUsers, getUserProfile, toggleUserStatus, getCurrentRates, updateRates, listBranches, createBranch, updateBranch, deleteBranch, getAlertSettings, updateAlertSettings, updateCommissionSetting, getInventoryHistory, getTransactionDetails };
+/**
+ * Ejecuta manualmente el proceso de expiración de transacciones
+ * Útil para testing y verificación sin esperar el cron
+ */
+const runExpirationCheck = async (req, res, next) => {
+  try {
+    const expirationService = require('../services/expirationService');
+    
+    console.log('🔧 [ADMIN] Ejecutando verificación manual de expiración...');
+    
+    // Ejecutar verificación
+    await expirationService.runManualCheck();
+    
+    // Obtener estadísticas de transacciones expiradas hoy
+    const [stats] = await pool.query(`
+      SELECT 
+        COUNT(*) as total_expired_today,
+        SUM(CASE WHEN type = 'buy' THEN 1 ELSE 0 END) as buy_expired,
+        SUM(CASE WHEN type = 'sell' THEN 1 ELSE 0 END) as sell_expired
+      FROM transactions
+      WHERE status = 'expired'
+        AND DATE(updated_at) = CURDATE()
+    `);
+    
+    // Obtener próximas a expirar
+    const [upcoming] = await pool.query(`
+      SELECT transaction_code, type, expires_at,
+             TIMESTAMPDIFF(MINUTE, NOW(), expires_at) as minutes_remaining
+      FROM transactions
+      WHERE expires_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 2 HOUR)
+        AND status IN ('reserved', 'ready_to_receive', 'ready_for_pickup')
+      ORDER BY expires_at ASC
+      LIMIT 10
+    `);
+    
+    return res.json({
+      success: true,
+      message: 'Verificación de expiración ejecutada correctamente',
+      stats: stats[0] || { total_expired_today: 0, buy_expired: 0, sell_expired: 0 },
+      upcoming_expirations: upcoming || []
+    });
+  } catch (err) {
+    console.error('Error ejecutando verificación de expiración:', err);
+    next(err);
+  }
+};
+
+/**
+ * Obtiene configuración de expiración y estadísticas
+ */
+const getExpirationSettings = async (req, res, next) => {
+  try {
+    // Obtener configuración actual
+    const [settings] = await pool.query(
+      'SELECT value FROM settings WHERE key_name = ?',
+      ['reservation_expiry_hours']
+    );
+    
+    const expiryHours = settings && settings[0] ? parseInt(settings[0].value) : 24;
+    
+    // Estadísticas de expiración
+    const [stats] = await pool.query(`
+      SELECT 
+        COUNT(CASE WHEN DATE(updated_at) = CURDATE() THEN 1 END) as expired_today,
+        COUNT(CASE WHEN DATE(updated_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN 1 END) as expired_week,
+        COUNT(CASE WHEN DATE(updated_at) >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 1 END) as expired_month,
+        COUNT(*) as expired_total
+      FROM transactions
+      WHERE status = 'expired'
+    `);
+    
+    return res.json({
+      expiry_hours: expiryHours,
+      statistics: stats[0] || {}
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Actualiza la configuración de tiempo de expiración
+ */
+const updateExpirationSettings = async (req, res, next) => {
+  try {
+    const { expiryHours } = req.body;
+    
+    if (!expiryHours || expiryHours < 1 || expiryHours > 168) {
+      return res.status(400).json({ 
+        message: 'expiryHours debe estar entre 1 y 168 (1 semana)' 
+      });
+    }
+    
+    await pool.query(
+      'INSERT INTO settings (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?',
+      ['reservation_expiry_hours', String(expiryHours), String(expiryHours)]
+    );
+    
+    return res.json({ 
+      success: true,
+      message: `Tiempo de expiración actualizado a ${expiryHours} horas`,
+      expiry_hours: expiryHours
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { 
+  getInventory, 
+  updateInventory, 
+  listAllTransactions, 
+  changeTransactionStatus, 
+  getDashboardKPIs, 
+  getDashboardChartData, 
+  getInventorySummary, 
+  getRecentTransactions, 
+  listUsers, 
+  getUserProfile, 
+  toggleUserStatus, 
+  getCurrentRates, 
+  updateRates, 
+  listBranches, 
+  createBranch, 
+  updateBranch, 
+  deleteBranch, 
+  getAlertSettings, 
+  updateAlertSettings, 
+  updateCommissionSetting, 
+  getInventoryHistory, 
+  getTransactionDetails,
+  runExpirationCheck,
+  getExpirationSettings,
+  updateExpirationSettings
+};

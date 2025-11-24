@@ -28,6 +28,12 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
   const [fromCurrency, setFromCurrency] = useState('MXN');
   const [toCurrency, setToCurrency] = useState('USD');
 
+  // Función para redondear MXN (sin centavos)
+  // Si centavos >= 50, redondea arriba; si < 50, redondea abajo
+  const roundMXN = (amount: number): number => {
+    return Math.round(amount);
+  };
+
   // Branch and method state
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [branchId, setBranchId] = useState<number | ''>('');
@@ -90,11 +96,17 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       const numAmount = parseFloat(amount);
       // When buying USD: fromAmount (MXN) / effectiveRate = toAmount (USD)
       // When selling USD: fromAmount (USD) * effectiveRate = toAmount (MXN)
-      const result = operationType === 'buy'
+      let result = operationType === 'buy'
         ? numAmount / rateEff
         : numAmount * rateEff;
-      // Store unrounded internal value and formatted display value
-      setToAmount(result.toFixed(2));
+      
+      // Si el resultado es MXN (venta), redondearlo sin centavos
+      if (operationType === 'sell') {
+        result = roundMXN(result);
+        setToAmount(result.toFixed(0)); // Sin decimales para MXN
+      } else {
+        setToAmount(result.toFixed(2)); // USD mantiene 2 decimales
+      }
     } else {
       setToAmount('');
     }
@@ -106,10 +118,17 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       const numAmount = parseFloat(amount);
       // When buying USD: toAmount (USD) * effectiveRate = fromAmount (MXN)
       // When selling USD: toAmount (MXN) / effectiveRate = fromAmount (USD)
-      const result = operationType === 'buy'
+      let result = operationType === 'buy'
         ? numAmount * rateEff
         : numAmount / rateEff;
-      setFromAmount(result.toFixed(2));
+      
+      // Si el resultado es MXN (compra), redondearlo sin centavos
+      if (operationType === 'buy') {
+        result = roundMXN(result);
+        setFromAmount(result.toFixed(0)); // Sin decimales para MXN
+      } else {
+        setFromAmount(result.toFixed(2)); // USD mantiene 2 decimales
+      }
     } else {
       setFromAmount('');
     }
@@ -118,8 +137,9 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
   // Rates and commission breakdown for UI
   const effectiveRate = getEffectiveRate();
   // For commission calculations prefer to use the raw numeric values (not pre-rounded strings)
-  const rawFrom = parseFloat(fromAmount || '0'); // value in fromCurrency
-  const rawTo = parseFloat(toAmount || '0'); // value in toCurrency
+  // Aplicar redondeo a MXN para cálculos
+  const rawFrom = operationType === 'buy' ? roundMXN(parseFloat(fromAmount || '0')) : parseFloat(fromAmount || '0');
+  const rawTo = operationType === 'sell' ? roundMXN(parseFloat(toAmount || '0')) : parseFloat(toAmount || '0');
   let commissionAmountMXN: number | null = null;
   try {
     if (baseRate && effectiveRate) {
@@ -128,13 +148,13 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         // USD delivered = rawTo (calculated using effectiveRate).
         const usdDelivered = rawTo; // already calculated using effectiveRate
         const whatWouldBePaidAtBase = usdDelivered * baseRate;
-        commissionAmountMXN = Number((rawFrom - whatWouldBePaidAtBase).toFixed(2));
+        commissionAmountMXN = Math.round(rawFrom - whatWouldBePaidAtBase);
       } else {
         // sell: user delivers USD (fromCurrency = USD). rawFrom is USD delivered.
         const usdDelivered = rawFrom;
         const whatBranchWouldPayAtBase = usdDelivered * baseRate; // MXN
         const mxnPaidToUser = rawTo; // calculated using effectiveRate
-        commissionAmountMXN = Number((whatBranchWouldPayAtBase - mxnPaidToUser).toFixed(2));
+        commissionAmountMXN = Math.round(whatBranchWouldPayAtBase - mxnPaidToUser);
       }
       if (isNaN(commissionAmountMXN) || commissionAmountMXN < 0) commissionAmountMXN = 0;
     }
@@ -149,7 +169,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       amountAccordingToBase = rawFrom / baseRate;
     } else {
       // User delivers USD, amount according to base rate = USD * baseRate -> MXN
-      amountAccordingToBase = rawFrom * baseRate;
+      amountAccordingToBase = Math.round(rawFrom * baseRate);
     }
     if (isNaN(amountAccordingToBase) || !isFinite(amountAccordingToBase)) amountAccordingToBase = null;
   }
@@ -286,12 +306,21 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       setError('Debes seleccionar una sucursal.');
       return;
     }
-    const finalFromAmount = parseFloat(fromAmount);
-    const finalToAmount = parseFloat(toAmount);
+    let finalFromAmount = parseFloat(fromAmount);
+    let finalToAmount = parseFloat(toAmount);
 
     if (isNaN(finalFromAmount) || finalFromAmount <= 0 || isNaN(finalToAmount) || finalToAmount <= 0) {
       setError('Ingresa un monto válido para la operación.');
       return;
+    }
+
+    // Redondear MXN antes de enviar al backend
+    if (operationType === 'buy') {
+      // Compra: fromAmount es MXN (lo que paga el cliente)
+      finalFromAmount = roundMXN(finalFromAmount);
+    } else {
+      // Venta: toAmount es MXN (lo que recibe el cliente)
+      finalToAmount = roundMXN(finalToAmount);
     }
 
     setIsLoading(true);
@@ -472,7 +501,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Comisión sucursal aprox.:</span>
-                    <span className="font-medium text-red-600">- {commissionAmountMXN !== null ? commissionAmountMXN.toFixed(2) : '—'} MXN</span>
+                    <span className="font-medium text-red-600">- {commissionAmountMXN !== null ? commissionAmountMXN.toFixed(0) : '—'} MXN</span>
                   </div>
                   <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
                     <div className="flex justify-between items-center">
@@ -493,7 +522,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-600">Monto según tasa de cambio (sin comisión):</span>
-                    <span className="font-medium text-gray-800">{amountAccordingToBase !== null ? amountAccordingToBase.toFixed(2) : '—'} MXN</span>
+                    <span className="font-medium text-gray-800">{amountAccordingToBase !== null ? amountAccordingToBase.toFixed(0) : '—'} MXN</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Tasa base:</span>
@@ -505,7 +534,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Comisión sucursal aprox.:</span>
-                    <span className="font-medium text-red-600">- {commissionAmountMXN !== null ? commissionAmountMXN.toFixed(2) : '—'} MXN</span>
+                    <span className="font-medium text-red-600">- {commissionAmountMXN !== null ? commissionAmountMXN.toFixed(0) : '—'} MXN</span>
                   </div>
                   <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
                     <div className="flex justify-between items-center">

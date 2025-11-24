@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/userModel');
+const { sendPasswordResetEmail } = require('../services/emailService');
 
 const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-key-for-development';
 console.log('🔧 JWT Secret configurado:', jwtSecret ? 'Sí' : 'No', '- Longitud:', jwtSecret?.length || 0);
@@ -136,4 +137,120 @@ const loginGoogle = async (req, res, next) => {
   }
 };
 
-module.exports = { login, register, loginGoogle };
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ message: 'Email es requerido' });
+    }
+
+    const user = await userModel.findByEmail(email);
+    
+    // Por seguridad, siempre respondemos con éxito aunque el email no exista
+    // Esto previene que atacantes identifiquen emails válidos
+    if (!user) {
+      console.log('⚠️ Intento de reset para email no registrado:', email);
+      return res.json({ message: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña' });
+    }
+
+    // Verificar que el usuario se registró con email/password
+    const authMethod = user.auth_provider || 'email';
+    if (authMethod !== 'email') {
+      console.log('⚠️ Intento de reset para cuenta de Google:', email);
+      return res.status(400).json({ 
+        message: 'Esta cuenta fue registrada con Google. No es posible restablecer la contraseña.',
+        authProvider: 'google'
+      });
+    }
+
+    // Verificar si el usuario está activo
+    if (user.hasOwnProperty('active') && !user.active) {
+      console.log('❌ Usuario desactivado intentó restablecer contraseña:', email);
+      return res.status(403).json({ message: 'Tu cuenta ha sido desactivada. Contacta a soporte.' });
+    }
+
+    // Crear token JWT válido por 1 hora
+    const resetToken = jwt.sign(
+      { email: user.email, purpose: 'password-reset' },
+      jwtSecret,
+      { expiresIn: '1h' }
+    );
+
+    console.log('🔑 Token de reset generado para:', email);
+
+    // Enviar email con el token
+    const emailSent = await sendPasswordResetEmail(user.email, resetToken, user.name);
+    
+    if (!emailSent) {
+      console.error('❌ Error enviando email de reset a:', email);
+      return res.status(500).json({ message: 'Error enviando el correo. Por favor intenta más tarde.' });
+    }
+
+    console.log('✅ Email de reset enviado a:', email);
+    return res.json({ message: 'Si el correo existe, recibirás un enlace para restablecer tu contraseña' });
+  } catch (err) {
+    console.error('❌ Error en forgotPassword:', err);
+    next(err);
+  }
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+    
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token y nueva contraseña son requeridos' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+
+    // Verificar el token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch (err) {
+      console.log('❌ Token inválido o expirado:', err.message);
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({ message: 'El enlace ha expirado. Por favor solicita uno nuevo.' });
+      }
+      return res.status(401).json({ message: 'Enlace inválido' });
+    }
+
+    // Verificar que sea un token de reset de contraseña
+    if (decoded.purpose !== 'password-reset') {
+      console.log('❌ Token no es de reset de contraseña');
+      return res.status(401).json({ message: 'Enlace inválido' });
+    }
+
+    const { email } = decoded;
+
+    // Verificar que el usuario existe
+    const user = await userModel.findByEmail(email);
+    if (!user) {
+      console.log('❌ Usuario no encontrado para email:', email);
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Hash de la nueva contraseña
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Actualizar la contraseña
+    const updated = await userModel.updatePassword(email, hashedPassword);
+    
+    if (!updated) {
+      console.error('❌ Error actualizando contraseña para:', email);
+      return res.status(500).json({ message: 'Error actualizando la contraseña' });
+    }
+
+    console.log('✅ Contraseña actualizada exitosamente para:', email);
+    return res.json({ message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.' });
+  } catch (err) {
+    console.error('❌ Error en resetPassword:', err);
+    next(err);
+  }
+};
+
+module.exports = { login, register, loginGoogle, forgotPassword, resetPassword };

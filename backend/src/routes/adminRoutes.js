@@ -31,4 +31,9 @@ router.get('/config/alerts', authenticate, isAdmin, adminController.getAlertSett
 router.put('/config/alerts', authenticate, isAdmin, adminController.updateAlertSettings);
 router.put('/config/commission', authenticate, isAdmin, adminController.updateCommissionSetting);
 
+// Rutas de gestión de expiración (solo admin)
+router.post('/expire-transactions/check', authenticate, isAdmin, adminController.runExpirationCheck);
+router.get('/expire-transactions/settings', authenticate, isAdmin, adminController.getExpirationSettings);
+router.put('/expire-transactions/settings', authenticate, isAdmin, adminController.updateExpirationSettings);
+
 module.exports = router;

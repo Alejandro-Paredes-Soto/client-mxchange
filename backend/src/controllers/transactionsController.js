@@ -90,20 +90,23 @@ const createTransaction = async (req, res, next) => {
     // Now compute serverEffectiveRate using server commissionPercent
     const serverEffectiveRate = type === 'buy' ? Number((baseRate * (1 + cp / 100)).toFixed(6)) : Number((baseRate * (1 - cp / 100)).toFixed(6));
 
-    // Compute server-side final amounts (rounded to 2 decimals):
-    // - For 'buy': client requests USD (amount_to) -> server computes MXN to charge
-    // - For 'sell': client delivers USD (amount_from) -> server computes MXN to pay
+    // Compute server-side final amounts:
+    // - For 'buy': client requests USD (amount_to) -> server computes MXN to charge (ROUNDED, no decimals)
+    // - For 'sell': client delivers USD (amount_from) -> server computes MXN to pay (ROUNDED, no decimals)
+    // USD keeps 2 decimals, MXN is rounded to whole numbers (no cents)
     let serverAmountFrom = 0; // MXN when buying, USD when selling (matches currency_from)
     let serverAmountTo = 0;   // USD when buying, MXN when selling (matches currency_to)
 
     if (type === 'buy') {
       const usdRequested = Number(amount_to);
       serverAmountTo = usdRequested;
-      serverAmountFrom = Number((usdRequested * serverEffectiveRate).toFixed(2));
+      // MXN que paga el cliente: redondear sin decimales (Math.round)
+      serverAmountFrom = Math.round(usdRequested * serverEffectiveRate);
     } else {
       const usdDelivered = Number(amount_from);
       serverAmountFrom = usdDelivered;
-      serverAmountTo = Number((usdDelivered * serverEffectiveRate).toFixed(2));
+      // MXN que recibe el cliente: redondear sin decimales (Math.round)
+      serverAmountTo = Math.round(usdDelivered * serverEffectiveRate);
     }
 
     // Validate server computed amounts
@@ -158,14 +161,15 @@ const createTransaction = async (req, res, next) => {
   // 5. Calculate commission for the transaction.
   // Calcularemos la comisión en MXN como la diferencia entre
   // el monto cobrado y lo que correspondería al valor según la tasa base.
+  // La comisión también se redondea a entero (sin centavos)
     let commissionAmount = 0;
     try {
       // baseRate ya está disponible y serverEffectiveRate también
       if (type === 'buy') {
         // Cliente paga MXN (serverAmountFrom) y recibe USD (serverAmountTo)
-        commissionAmount = Number((serverAmountFrom - (serverAmountTo * baseRate)).toFixed(2));
+        commissionAmount = Math.round(serverAmountFrom - (serverAmountTo * baseRate));
       } else {
-        commissionAmount = Number(((serverAmountFrom * baseRate) - serverAmountTo).toFixed(2));
+        commissionAmount = Math.round((serverAmountFrom * baseRate) - serverAmountTo);
       }
       if (isNaN(commissionAmount) || commissionAmount < 0) commissionAmount = 0;
     } catch (e) {
@@ -178,22 +182,49 @@ const createTransaction = async (req, res, next) => {
     // El descuento y acreditación real se harán cuando se confirme el pago.
     // Esto evita el doble descuento y mantiene el inventario consistente.
 
+    // 5.b Calcular fecha de expiración para la transacción
+    let expiresAt = null;
+    try {
+      // Obtener tiempo de expiración desde settings (en horas)
+      const [expirySettings] = await connection.query(
+        'SELECT value FROM settings WHERE key_name = ?',
+        ['reservation_expiry_hours']
+      );
+      
+      const expiryHours = expirySettings && expirySettings[0] && expirySettings[0].value 
+        ? parseInt(expirySettings[0].value) 
+        : 24; // Default 24 horas
+      
+      // Calcular fecha de expiración
+      expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + expiryHours);
+      
+      console.log(`[EXPIRATION] Transacción expirará en ${expiryHours} horas: ${expiresAt.toISOString()}`);
+    } catch (expiryErr) {
+      console.warn('Error obteniendo configuración de expiración, usando default 24h:', expiryErr && expiryErr.message ? expiryErr.message : expiryErr);
+      expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+    }
+
     // 6. Create the transaction record
     const code = generateTransactionCode();
     const [result] = await connection.query(
-      'INSERT INTO transactions (user_id, branch_id, type, amount_from, currency_from, amount_to, currency_to, exchange_rate, commission_percent, commission_amount, method, status, transaction_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO transactions (user_id, branch_id, type, amount_from, currency_from, amount_to, currency_to, exchange_rate, commission_percent, commission_amount, method, status, transaction_code, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       // Usar 'reserved' como estado inicial: la transacción se reserva primero antes de procesar el pago.
-      [userId, branch_id, type, serverAmountFrom, currency_from, serverAmountTo, currency_to, serverEffectiveRate, commissionPercent, commissionAmount, method || null, 'reserved', code]
+      [userId, branch_id, type, serverAmountFrom, currency_from, serverAmountTo, currency_to, serverEffectiveRate, commissionPercent, commissionAmount, method || null, 'reserved', code, expiresAt]
     );
     const newTransactionId = result.insertId;
 
     // 6.b Insertar reserva de inventario (registro separado para poder liberar/confirmar)
     try {
+      // Calcular expiración de la reserva (misma que la transacción)
+      const reservationExpiresAt = expiresAt;
+      
       // amountToVerify es lo que la sucursal entrega (se descuenta del inventario)
       await connection.query(
-        'INSERT INTO inventory_reservations (transaction_id, branch_id, currency, amount_reserved, status) VALUES (?, ?, ?, ?, ?) ',
+        'INSERT INTO inventory_reservations (transaction_id, branch_id, currency, amount_reserved, status, expires_at) VALUES (?, ?, ?, ?, ?, ?) ',
         // Use serverAmountTo: la cantidad que la sucursal apartó para entregar
-        [newTransactionId, branch_id, currencyToVerify, serverAmountTo, 'reserved']
+        [newTransactionId, branch_id, currencyToVerify, serverAmountTo, 'reserved', reservationExpiresAt]
       );
     } catch (resErr) {
       console.warn('No se pudo crear inventory_reservation:', resErr && resErr.message ? resErr.message : resErr);
@@ -203,9 +234,12 @@ const createTransaction = async (req, res, next) => {
     // 7. Commit the database transaction
     await connection.commit();
 
+    // Liberar la conexión INMEDIATAMENTE después del commit para evitar bloqueos
+    connection.release();
+
     // 8. Fetch the complete transaction data to return to the client
     const [rowsTx] = await pool.query(
-      `SELECT t.id, t.transaction_code, t.status, t.type, t.amount_from, t.currency_from, t.amount_to, t.currency_to, t.exchange_rate, t.method, b.name as branch_name, t.created_at
+      `SELECT t.id, t.transaction_code, t.status, t.type, t.amount_from, t.currency_from, t.amount_to, t.currency_to, t.exchange_rate, t.method, t.branch_id, b.name as branch_name, t.created_at
        FROM transactions t
        JOIN branches b ON t.branch_id = b.id
        WHERE t.id = ?`,
@@ -231,8 +265,6 @@ const createTransaction = async (req, res, next) => {
       // global.io se expone desde server.js; verificar existencia
       if (global && global.io && typeof global.io.emit === 'function') {
         try {
-          global.io.emit('inventory.updated', socketPayload);
-          
           // Notificación para admins: nueva operación reservada
           const tx = rowsTx[0];
           try {
@@ -281,6 +313,9 @@ const createTransaction = async (req, res, next) => {
           } catch (emitBranchErr) {
             console.warn('No se pudo emitir notificación a sucursal:', emitBranchErr && emitBranchErr.message ? emitBranchErr.message : emitBranchErr);
           }
+          
+          // Emitir evento de inventario actualizado (sin datos de transacción para evitar duplicados)
+          global.io.emit('inventory.updated', socketPayload);
 
           // Notificación para el usuario: reserva creada
           const operationType = tx.type === 'buy' ? 'COMPRA' : 'VENTA';
@@ -302,9 +337,13 @@ const createTransaction = async (req, res, next) => {
           
           // Enviar email al usuario
           try {
-            const [userRows] = await pool.query('SELECT email FROM users WHERE idUser = ?', [userId]);
+            const [userRows] = await pool.query('SELECT email, name FROM users WHERE idUser = ?', [userId]);
             if (userRows && userRows[0] && userRows[0].email) {
               await emailService.sendTransactionCreatedEmail(userRows[0].email, tx);
+              
+              // Enviar notificación a admins y sucursal
+              const userName = userRows[0].name || userRows[0].email;
+              await emailService.sendAdminAndBranchNotification(tx, userName);
             }
           } catch (emailErr) {
             console.warn('No se pudo enviar email al usuario:', emailErr && emailErr.message ? emailErr.message : emailErr);
@@ -337,10 +376,22 @@ const createTransaction = async (req, res, next) => {
     res.status(201).json({ transaction: rowsTx[0] });
 
   } catch (error) {
-    if (connection) await connection.rollback(); // Rollback on any error
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackErr) {
+        console.error('Error al hacer rollback:', rollbackErr);
+      }
+    }
     next(error); // Pass to global error handler
   } finally {
-    if (connection) connection.release(); // Release connection back to the pool
+    if (connection && connection.connection && connection.connection._fatalError === undefined) {
+      try {
+        connection.release(); // Release connection back to the pool
+      } catch (releaseErr) {
+        console.error('Error al liberar conexión:', releaseErr);
+      }
+    }
   }
 };
 
