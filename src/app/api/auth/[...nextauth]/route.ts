@@ -23,6 +23,11 @@ const handler = NextAuth({
   callbacks: {
     async signIn({ user }) {
       try {
+        // Leer la cookie para saber si es login o register
+        const cookieStore = await cookies();
+        const googleAuthAction = cookieStore.get('googleAuthAction')?.value || 'login';
+        console.log('🔐 NextAuth signIn - action from cookie:', googleAuthAction);
+        
         const resp = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/user/loginGoogle`,
           {
@@ -34,6 +39,7 @@ const handler = NextAuth({
             body: JSON.stringify({
               email: user.email,
               name: user.name,
+              action: googleAuthAction, // Pasar el action al backend
             }),
           }
         );

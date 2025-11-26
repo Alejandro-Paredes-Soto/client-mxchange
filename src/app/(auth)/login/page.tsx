@@ -1,18 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Cookies from 'js-cookie';
 import useUtils from "../../services/utils";
 import useLogin from "./useLogin";
 import { getRates } from '../../services/api';
 import { FcGoogle } from "react-icons/fc";
 import { MdAutorenew } from "react-icons/md";
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { NumberInput } from '@/components/ui/number-input';
 import { toast } from "sonner";
 
 
-const Login = () => {
+const LoginContent = () => {
 
   const searchParams = useSearchParams();
   
@@ -33,27 +35,45 @@ const Login = () => {
   const [operation, setOperation] = useState('buyUsd');
   const [inputAmount, setInputAmount] = useState('1000');
   const [outputAmount, setOutputAmount] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordRegister, setShowPasswordRegister] = useState(false);
 
   // Detectar errores de OAuth en la URL
   useEffect(() => {
     const error = searchParams.get('error');
     if (error) {
+      // Limpiar la cookie de googleAuthAction
+      Cookies.remove('googleAuthAction');
+      
+      // Primero cambiar al tab correcto antes de mostrar el toast
       if (error === 'REGISTRATION_REQUIRED') {
-        toast.error("No tienes una cuenta registrada", {
-          description: "Por favor regístrate primero usando el botón de Registrarse."
-        });
         setActiveForm("register");
-      } else if (error === 'EMAIL_PASSWORD_ACCOUNT') {
-        toast.error("Esta cuenta usa email y contraseña", {
-          description: "Por favor, inicia sesión con tu correo y contraseña."
-        });
-      } else {
-        toast.error("Error al iniciar sesión con Google", {
-          description: error
-        });
       }
-      // Limpiar el parámetro de error de la URL
-      window.history.replaceState({}, '', '/login');
+      
+      // Usar setTimeout para asegurar que el toast se muestre después del render
+      const timer = setTimeout(() => {
+        if (error === 'REGISTRATION_REQUIRED') {
+          toast.error("No tienes una cuenta registrada", {
+            description: "Por favor regístrate primero usando el formulario de abajo.",
+            duration: 6000, // Mostrar por más tiempo
+          });
+        } else if (error === 'EMAIL_PASSWORD_ACCOUNT') {
+          toast.error("Esta cuenta usa email y contraseña", {
+            description: "Por favor, inicia sesión con tu correo y contraseña.",
+            duration: 5000,
+          });
+        } else {
+          toast.error("Error al iniciar sesión con Google", {
+            description: error,
+            duration: 5000,
+          });
+        }
+        
+        // Limpiar el parámetro de error de la URL después de mostrar el toast
+        window.history.replaceState({}, '', '/login');
+      }, 100); // Pequeño delay para asegurar que la UI esté lista
+      
+      return () => clearTimeout(timer);
     }
   }, [searchParams, setActiveForm]);
 
@@ -93,28 +113,31 @@ const Login = () => {
   }, [inputAmount, operation, rates, currentRate]);
 
   return (
-    <div className="flex sm:flex-row flex-col justify-center items-center gap-8 bg-white p-[50px] sm:p-[30px] sm:px-[20px] w-full min-h-screen" >
-      <div className="bg-white shadow-[0_10px_30px_rgba(0,0,0,0.1)] p-[40px] border border-[#f0f0f0] rounded-[20px] w-full max-w-[500px] text-center">
-        <div className="mb-[30px]">
-          <div className="mb-[5px] font-bold text-[2.5rem] text-primary sm:text-[2rem]">
-            <h1>M<span className="text-[3rem] text-secondary sm:text-[2.5rem]">X</span>ange</h1>
-
-            <p className="mb-[20px] font-light text-gray-custom">Compra y vende divisas al mejor precio</p>
+    <div className="flex lg:flex-row flex-col justify-center items-center gap-6 lg:gap-8 bg-background p-6 md:p-8 lg:p-12 w-full min-h-screen" >
+      <div className="bg-white shadow-lg p-6 md:p-8 lg:p-10 border border-light-green rounded-2xl w-full max-w-[500px]">
+        <div className="mb-6">
+          <div className="mb-4 text-center">
+            <h1 className="font-bold text-primary text-4xl md:text-5xl">
+              M<span className="text-secondary text-5xl md:text-6xl">X</span>ange
+            </h1>
+            <p className="mt-2 font-light text-gray-600 text-sm md:text-base">Compra y vende divisas al mejor precio</p>
           </div>
 
 
 
-          <div className="flex bg-light-green mb-[30px] p-[4px] rounded-[25px]">
+          <div className="flex bg-light-green mb-6 p-1 rounded-full">
             <button
-              className={`flex-1 p-[12px_20px] rounded-[20px] bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 ease-in-out font-['Roboto'] border-none ${activeForm === "login" ? "bg-white shadow-[0_2px_10px_rgba(0,0,0,0.1)]" : ""
-                }`}
+              className={`flex-1 py-3 px-4 md:px-6 rounded-full bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 ease-in-out border-none text-sm md:text-base ${
+                activeForm === "login" ? "bg-white shadow-md" : ""
+              }`}
               onClick={() => setActiveForm("login")}
             >
               Iniciar Sesión
             </button>
             <button
-              className={`flex-1 p-[12px_20px] rounded-[20px] bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 ease-in-out font-['Roboto'] border-none ${activeForm === "register" ? "bg-white shadow-[0_2px_10px_rgba(0,0,0,0.1)]" : ""
-                }`}
+              className={`flex-1 py-3 px-4 md:px-6 rounded-full bg-transparent text-primary font-medium cursor-pointer transition-all duration-300 ease-in-out border-none text-sm md:text-base ${
+                activeForm === "register" ? "bg-white shadow-md" : ""
+              }`}
               onClick={() => setActiveForm("register")}
             >
               Registrarse
@@ -124,92 +147,116 @@ const Login = () => {
           <div className="relative overflow-hidden">
             {activeForm === "login" ? (
               <form
-                className="block"
+                className="block space-y-4"
                 onSubmit={onSubmitLogin}
               >
-                <div className="mb-[20px] text-left">
-                  <label className="block mb-[8px] font-medium text-primary">Email o Teléfono</label>
+                <div className="text-left">
+                  <label className="block mb-2 font-medium text-primary text-sm">Email o Teléfono</label>
                   <input
                     type="text"
                     placeholder="Ingresa tu email o teléfono"
                     name="email"
                     required
                     onChange={handleOnchangeLogin}
-                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
+                    className="px-4 py-3 border-2 border-light-green focus:border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary w-full text-sm md:text-base transition duration-300 cursor-pointer"
                   />
                 </div>
-                <div className="mb-[20px] text-left">
-                  <label className="block mb-[8px] font-medium text-primary">Contraseña</label>
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder="Ingresa tu contraseña"
-                    onChange={handleOnchangeLogin}
-                    required
-                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
-                  />
+                <div className="text-left">
+                  <label className="block mb-2 font-medium text-primary text-sm">Contraseña</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      name="password"
+                      placeholder="Ingresa tu contraseña"
+                      onChange={handleOnchangeLogin}
+                      required
+                      className="px-4 py-3 pr-12 border-2 border-light-green focus:border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary w-full text-sm md:text-base transition duration-300 cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="top-1/2 right-3 absolute text-gray-500 hover:text-gray-700 -translate-y-1/2 cursor-pointer transform"
+                    >
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </button>
+                  </div>
                 </div>
-                <button disabled={loadingLogin} type="submit" className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent disabled:opacity-50 hover:shadow-[0_5px_20px_rgba(104,224,127,0.4)] p-[15px] border-none rounded-[10px] w-full font-['Roboto'] font-medium text-[16px] text-white transition-all hover:-translate-y-[2px] duration-300 ease-in-out cursor-pointer">
+                <button 
+                  disabled={loadingLogin} 
+                  type="submit" 
+                  className="bg-primary hover:opacity-95 disabled:opacity-50 shadow-lg hover:shadow-xl px-4 py-3 rounded-lg w-full font-medium text-white text-sm md:text-base transition-all hover:-translate-y-0.5 duration-300 cursor-pointer disabled:cursor-not-allowed transform"
+                >
                   {loadingLogin ? (
                     <MdAutorenew size={20} className="m-auto the-spinner" />
                   ) : (
-                    <>
-
-                      Iniciar Sesión
-                    </>)
-
-                  }
+                    "Iniciar Sesión"
+                  )}
                 </button>
-                <div className="mt-[20px] text-center">
-                  <a role="button" className="text-[14px] text-secondary hover:text-primary no-underline cursor-pointer" onClick={() => onRouterLink('/forgotpassword')}>¿Olvidaste tu contraseña?</a>
+                <div className="text-center">
+                  <a 
+                    role="button" 
+                    className="text-secondary hover:text-primary text-sm no-underline transition-colors cursor-pointer" 
+                    onClick={() => onRouterLink('/forgotpassword')}
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </a>
                 </div>
               </form>
             ) : (
-              <form className={activeForm === "register" ? "block" : "hidden"} onSubmit={onSubmitRegister}>
-                <div className="mb-[20px] text-left">
-                  <label className="block mb-[8px] font-medium text-primary">Nombre Completo</label>
+              <form className={activeForm === "register" ? "block space-y-4" : "hidden"} onSubmit={onSubmitRegister}>
+                <div className="text-left">
+                  <label className="block mb-2 font-medium text-primary text-sm">Nombre Completo</label>
                   <input
                     type="text"
                     placeholder="Ingresa tu nombre completo"
                     required
                     name="name"
                     onChange={handleOnchangeRegister}
-                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
+                    className="px-4 py-3 border-2 border-light-green focus:border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary w-full text-sm md:text-base transition duration-300 cursor-pointer"
                   />
                 </div>
-                <div className="mb-[20px] text-left">
-                  <label className="block mb-[8px] font-medium text-primary">Email</label>
+                <div className="text-left">
+                  <label className="block mb-2 font-medium text-primary text-sm">Email</label>
                   <input
                     type="email"
                     placeholder="Ingresa tu email"
                     required
                     name="email"
                     onChange={handleOnchangeRegister}
-                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
+                    className="px-4 py-3 border-2 border-light-green focus:border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary w-full text-sm md:text-base transition duration-300 cursor-pointer"
                   />
                 </div>
 
-                <div className="mb-[20px] text-left">
-                  <label className="block mb-[8px] font-medium text-primary">Contraseña</label>
-                  <input
-                    type="password"
-                    placeholder="Crea una contraseña segura"
-                    required
-                    name="password"
-                    onChange={handleOnchangeRegister}
-                    className="p-[15px] border-2 border-light-green focus:border-secondary rounded-[10px] focus:outline-none w-full font-['Roboto'] text-[16px] transition duration-300 ease-in-out"
-                  />
+                <div className="text-left">
+                  <label className="block mb-2 font-medium text-primary text-sm">Contraseña</label>
+                  <div className="relative">
+                    <input
+                      type={showPasswordRegister ? "text" : "password"}
+                      placeholder="Crea una contraseña segura"
+                      required
+                      name="password"
+                      onChange={handleOnchangeRegister}
+                      className="px-4 py-3 pr-12 border-2 border-light-green focus:border-transparent rounded-lg focus:outline-none focus:ring-2 focus:ring-primary w-full text-sm md:text-base transition duration-300 cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordRegister(!showPasswordRegister)}
+                      className="top-1/2 right-3 absolute text-gray-500 hover:text-gray-700 -translate-y-1/2 cursor-pointer transform"
+                    >
+                      {showPasswordRegister ? <FaEyeSlash /> : <FaEye />}
+                    </button>
+                  </div>
                 </div>
-                <button type="submit" disabled={loadingRegister} className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent disabled:opacity-50 hover:shadow-[0_5px_20px_rgba(104,224,127,0.4)] p-[15px] border-none rounded-[10px] w-full font-['Roboto'] font-medium text-[16px] text-white transition-all hover:-translate-y-[2px] duration-300 ease-in-out cursor-pointer">
+                <button 
+                  type="submit" 
+                  disabled={loadingRegister} 
+                  className="bg-primary hover:opacity-95 disabled:opacity-50 shadow-lg hover:shadow-xl px-4 py-3 rounded-lg w-full font-medium text-white text-sm md:text-base transition-all hover:-translate-y-0.5 duration-300 cursor-pointer disabled:cursor-not-allowed transform"
+                >
                   {loadingRegister ? (
                     <MdAutorenew size={20} className="m-auto the-spinner" />
                   ) : (
-                    <>
-
-                      Crear Cuenta
-                    </>)
-
-                  }
+                    "Crear Cuenta"
+                  )}
                 </button>
               </form>
             )}
@@ -218,40 +265,51 @@ const Login = () => {
 
           </div>
 
-          <div className="relative my-[30px] text-center">
-            <span className="bg-white px-[20px] text-[14px] text-gray-custom">o continúa con</span>
+          <div className="relative my-6 text-center">
+            <div className="absolute inset-0 flex items-center">
+              <div className="border-light-green border-t w-full"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-4 text-gray-500 text-sm">o continúa con</span>
+            </div>
           </div>
 
-          <div className="flex gap-[15px] mb-[20px]">
-            <button disabled={loadingGoogle} className="flex flex-1 justify-center items-center gap-2 bg-white hover:bg-light-green disabled:opacity-50 p-[12px] border-2 border-light-green rounded-[10px] font-medium text-primary transition-all hover:-translate-y-[2px] duration-300 ease-in-out cursor-pointer" onClick={handleLoginGoogle}>
-
-
-              {loadingGoogle ? (
-                <MdAutorenew size={20} className="m-auto the-spinner" />
-              ) : (
-                <>
-
-                  <span> Iniciar Sesión con
-                    Google</span>
-                  <FcGoogle size={22} />
-                </>)
-
-              }
-            </button>
-          </div>
+          <button 
+            disabled={loadingGoogle} 
+              className="flex justify-center items-center gap-2 bg-white hover:bg-light-green disabled:opacity-50 hover:shadow-md px-4 py-3 border-2 border-light-green rounded-lg w-full font-medium text-primary text-sm md:text-base transition-all duration-300 cursor-pointer disabled:cursor-not-allowed" 
+            onClick={handleLoginGoogle}
+          >
+            {loadingGoogle ? (
+              <MdAutorenew size={20} className="m-auto the-spinner" />
+            ) : (
+              <>
+                <FcGoogle size={22} />
+                <span>Iniciar Sesión con Google</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
       <div className="w-full max-w-[500px]">
-        <div className="bg-gradient-primary-to-accent shadow-[0_5px_20px_rgba(104,224,127,0.2)] p-[25px] rounded-[15px]">
-          <div className="mb-[20px] font-semibold text-[18px] text-white text-5xl text-center">💱 Compra y Venta de Divisas</div>
+        <div className="bg-primary shadow-xl p-6 md:p-8 rounded-2xl">
+          <div className="mb-6 font-semibold text-white text-center">
+            <div className="mb-2 text-4xl md:text-5xl">💱</div>
+            <div className="text-xl md:text-2xl">Compra y Venta de Divisas</div>
+          </div>
 
-          <div className="flex bg-white mb-[10px] p-[4px] rounded-[10px]">
-            <button className={`flex-1 p-[8px_6px] border-none bg-transparent rounded-[8px] font-['Roboto'] font-medium cursor-pointer transition-all duration-300 ease-in-out text-primary text-[12px] ${operation === 'buyUsd' ? 'bg-secondary text-white' : ''}`}
+          <div className="flex bg-white/20 backdrop-blur-sm mb-4 p-1 rounded-xl">
+            <button 
+              className={`flex-1 py-2.5 px-3 md:px-4 border-none rounded-lg font-medium cursor-pointer transition-all duration-300 text-xs md:text-sm ${
+                operation === 'buyUsd' ? 'bg-white text-primary shadow-md' : 'bg-transparent text-white'
+              }`}
               onClick={() => setOperation('buyUsd')}
             >
               🟢 Comprar USD
             </button>
-            <button className={`flex-1 p-[8px_6px] border-none bg-transparent rounded-[8px] font-['Roboto'] font-medium cursor-pointer transition-all duration-300 ease-in-out text-primary text-[12px] ${operation === 'sellUsd' ? 'bg-secondary text-white' : ''}`}
+            <button 
+              className={`flex-1 py-2.5 px-3 md:px-4 border-none rounded-lg font-medium cursor-pointer transition-all duration-300 text-xs md:text-sm ${
+                operation === 'sellUsd' ? 'bg-white text-primary shadow-md' : 'bg-transparent text-white'
+              }`}
               onClick={() => setOperation('sellUsd')}
             >
               🔴 Vender USD
@@ -260,42 +318,43 @@ const Login = () => {
 
           {/* Opciones MXN removidas intencionalmente para simplificar la UI */}
 
-          <div className="flex sm:flex-col items-center gap-[15px] sm:gap-[10px] my-[20px]">
-            <div className="relative flex-1">
+          <div className="flex md:flex-row flex-col items-center gap-4 my-6">
+            <div className="relative flex-1 w-full">
               <NumberInput
                 placeholder="1000"
                 value={inputAmount}
                 onChange={(e) => setInputAmount(e.target.value)}
                 decimals={2}
-                className="bg-white focus:shadow-[0_0_10px_rgba(104,224,127,0.3)] p-[15px_50px_15px_15px] border-2 border-white focus:border-secondary rounded-[10px] focus:outline-none w-full font-semibold text-[18px] text-primary"
+                className="bg-white shadow-sm px-4 py-3 pr-16 border-2 border-white rounded-lg focus:outline-none focus:ring-2 focus:ring-primary w-full font-semibold text-primary text-lg cursor-pointer"
               />
-              <div className="top-1/2 right-[15px] absolute bg-primary p-[5px_10px] rounded-[5px] font-bold text-[12px] text-white -translate-y-1/2">{inputCurrency}</div>
+              <div className="top-1/2 right-4 absolute bg-primary px-3 py-1.5 rounded-md font-bold text-white text-xs -translate-y-1/2">{inputCurrency}</div>
             </div>
-            <div className="font-bold text-[24px] text-primary sm:rotate-90">→</div>
-            <div className="relative flex-1">
+            <div className="font-bold text-white text-2xl rotate-90 md:rotate-0">→</div>
+            <div className="relative flex-1 w-full">
               <input
                 type="text"
                 placeholder="0.00"
                 value={outputAmount.toFixed(2)}
                 readOnly
-                className="bg-white focus:shadow-[0_0_10px_rgba(104,224,127,0.3)] p-[15px_50px_15px_15px] border-2 border-white focus:border-secondary rounded-[10px] focus:outline-none w-full font-semibold text-[18px] text-primary"
+                className="bg-white/90 shadow-sm px-4 py-3 pr-16 border-2 border-white/50 rounded-lg focus:outline-none w-full font-semibold text-primary text-lg cursor-pointer"
               />
-              <div className="top-1/2 right-[15px] absolute bg-primary p-[5px_10px] rounded-[5px] font-bold text-[12px] text-white -translate-y-1/2">{outputCurrency}</div>
+              <div className="top-1/2 right-4 absolute bg-primary px-3 py-1.5 rounded-md font-bold text-white text-xs -translate-y-1/2">{outputCurrency}</div>
             </div>
           </div>
 
-          <div className="bg-white p-[15px] rounded-[10px]">
-            <div className="mb-[10px] font-semibold text-[14px] text-primary text-center">
+          <div className="bg-white/95 shadow-lg backdrop-blur-sm p-4 md:p-5 rounded-xl">
+            <div className="mb-3 font-semibold text-primary text-sm md:text-base text-center">
               {operationText}
             </div>
-            <div className="flex justify-between items-center mb-[8px]">
+            <div className="flex justify-around items-center gap-4">
               <div className="flex-1 text-center">
-                <div className="mb-[2px] text-[10px] text-gray-custom">Compramos USD</div>
-                <div className="font-semibold text-[14px] text-secondary">${rates.buy.toFixed(2)}</div>
+                <div className="mb-1 text-gray-600 text-xs">Compramos USD</div>
+                <div className="font-bold text-secondary text-base md:text-lg">${rates.buy.toFixed(2)}</div>
               </div>
+              <div className="bg-light-green w-px h-12"></div>
               <div className="flex-1 text-center">
-                <div className="mb-[2px] text-[10px] text-gray-custom">Vendemos USD</div>
-                <div className="font-semibold text-[14px] text-primary">${rates.sell.toFixed(2)}</div>
+                <div className="mb-1 text-gray-600 text-xs">Vendemos USD</div>
+                <div className="font-bold text-primary text-base md:text-lg">${rates.sell.toFixed(2)}</div>
               </div>
             </div>
             {/* Tasas MXN removidas para mostrar solo tasas USD */}
@@ -303,6 +362,19 @@ const Login = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+// Wrapper con Suspense para useSearchParams
+const Login = () => {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center items-center bg-background min-h-screen">
+        <MdAutorenew size={40} className="text-primary the-spinner" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 };
 

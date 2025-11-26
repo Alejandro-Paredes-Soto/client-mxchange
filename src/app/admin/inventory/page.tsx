@@ -40,7 +40,8 @@ interface BranchInventory {
 
 const AdminInventoryPage = () => {
   const [branches, setBranches] = useState<BranchInventory[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // true inicial para la carga inicial
+  const [saving, setSaving] = useState(false); // para operaciones de guardado
   const socket = useSocket();
 
   const [dialogOpen, setDialogOpen] = useState<boolean>(false);
@@ -112,7 +113,7 @@ const AdminInventoryPage = () => {
         if (typeof payload !== 'object' || payload === null) return;
         const p = payload as { branch_id?: number; inventory?: Record<string, unknown>; refresh?: boolean };
         if (!p.branch_id) return;
-        
+
         // SIEMPRE recargar desde el backend para obtener datos completos y actualizados
         // Esto incluye reserved_amount que se calcula en el backend
         console.log('🔄 Recargando inventario desde el backend...');
@@ -140,7 +141,7 @@ const AdminInventoryPage = () => {
     const adjustmentNum = Number(editingItem.adjustment);
     if (isNaN(adjustmentNum)) return;
     const newAmount = editingItem.currentAmount + adjustmentNum;
-    setLoading(true);
+    setSaving(true);
     try {
       const token = Cookies.get('token');
       const res = await putAdminInventory(editingItem.id, { amount: newAmount }, token);
@@ -154,22 +155,22 @@ const AdminInventoryPage = () => {
           if (amount > threshold * 0.5) return 'low';
           return 'critical';
         };
-        
+
         // update local state
         setBranches(prev => prev.map(b => {
-          const usd = b.usd && b.usd.id === editingItem.id 
-            ? { 
-                ...b.usd, 
-                amount: newAmount,
-                stock_status: calculateStatus(newAmount, b.usd.low_stock_threshold || 0)
-              } 
+          const usd = b.usd && b.usd.id === editingItem.id
+            ? {
+              ...b.usd,
+              amount: newAmount,
+              stock_status: calculateStatus(newAmount, b.usd.low_stock_threshold || 0)
+            }
             : b.usd;
-          const mxn = b.mxn && b.mxn.id === editingItem.id 
-            ? { 
-                ...b.mxn, 
-                amount: newAmount,
-                stock_status: calculateStatus(newAmount, b.mxn.low_stock_threshold || 0)
-              } 
+          const mxn = b.mxn && b.mxn.id === editingItem.id
+            ? {
+              ...b.mxn,
+              amount: newAmount,
+              stock_status: calculateStatus(newAmount, b.mxn.low_stock_threshold || 0)
+            }
             : b.mxn;
           return { ...b, usd, mxn };
         }));
@@ -179,15 +180,15 @@ const AdminInventoryPage = () => {
     } finally {
       setDialogOpen(false);
       setEditingItem(null);
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   const confirmThresholds = async () => {
     if (!editingBranch) return;
-    setLoading(true);
+    setSaving(true);
     try {
-  const token = Cookies.get('token');
+      const token = Cookies.get('token');
       // update USD item
       if (editingBranch.usd) {
         await putAdminInventory(editingBranch.usd!.id!, { low_stock_threshold: usdThreshold }, token);
@@ -209,7 +210,7 @@ const AdminInventoryPage = () => {
     } finally {
       setThresholdDialogOpen(false);
       setEditingBranch(null);
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -272,7 +273,7 @@ const AdminInventoryPage = () => {
               const mxnDisponible = (branch.mxn?.amount || 0) - (branch.mxn?.reserved_amount || 0);
               const usdBajoUmbral = usdDisponible <= (branch.usd?.low_stock_threshold || 0);
               const mxnBajoUmbral = mxnDisponible <= (branch.mxn?.low_stock_threshold || 0);
-              
+
               return (
                 <TableRow key={branch.branch_id}>
                   <TableCell className="font-semibold">{branch.branch_name}</TableCell>
@@ -353,9 +354,11 @@ const AdminInventoryPage = () => {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancelar</Button>
+              <Button variant="outline" disabled={saving}>Cancelar</Button>
             </DialogClose>
-            <Button onClick={confirmAdjust}>Confirmar Ajuste</Button>
+            <Button onClick={confirmAdjust} disabled={saving}>
+              {saving ? 'Guardando...' : 'Confirmar Ajuste'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -366,7 +369,7 @@ const AdminInventoryPage = () => {
           <DialogHeader>
             <DialogTitle>Configurar Umbrales</DialogTitle>
             <DialogDescription>
-              Establece los umbrales de bajo inventario para {editingBranch?.branch_name}
+              Establece los umbrales de bajo stock para notificar cuando el inventario de {editingBranch?.branch_name} esté por debajo de estos valores.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -389,9 +392,11 @@ const AdminInventoryPage = () => {
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline">Cancelar</Button>
+              <Button variant="outline" disabled={saving}>Cancelar</Button>
             </DialogClose>
-            <Button onClick={confirmThresholds}>Guardar Umbrales</Button>
+            <Button onClick={confirmThresholds} disabled={saving}>
+              {saving ? 'Guardando...' : 'Guardar Umbrales'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

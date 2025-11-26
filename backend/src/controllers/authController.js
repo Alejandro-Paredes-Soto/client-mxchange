@@ -9,19 +9,19 @@ console.log('🔧 JWT Secret configurado:', jwtSecret ? 'Sí' : 'No', '- Longitu
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+    if (!email || !password) return res.status(400).json({ message: 'Correo electrónico y contraseña requeridos' });
 
     const user = await userModel.findByEmail(email);
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!user) return res.status(401).json({ message: 'Credenciales inválidas' });
 
     console.log('🔍 Usuario encontrado:', { id: user.idUser || user.id, email: user.email, active: user.active });
     // Verificar si el usuario está activo
     if (!user.active) {
-      return res.status(403).json({ message: 'Your account has been deactivated. Please contact support.' });
+      return res.status(403).json({ message: 'Tu cuenta ha sido desactivada. Por favor, contacta a soporte.' });
     }
 
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!match) return res.status(401).json({ message: 'Credenciales inválidas' });
 
     // userModel returns `idUser` from the DB; normalize to `id` in the token and response
     const userId = user.idUser || user.id;
@@ -38,7 +38,7 @@ const login = async (req, res, next) => {
 const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) return res.status(400).json({ message: 'name, email and password required' });
+    if (!name || !email || !password) return res.status(400).json({ message: 'Nombre, correo electrónico y contraseña requeridos' });
 
     const existing = await userModel.findByEmail(email);
     if (existing) {
@@ -73,37 +73,58 @@ const register = async (req, res, next) => {
 
 const loginGoogle = async (req, res, next) => {
   try {
-    const { email, name } = req.body;
-    console.log('🔍 Google Login attempt:', { email, name });
+    const { email, name, action = 'login' } = req.body; // action: 'login' | 'register'
+    console.log('🔍 Google Auth attempt:', { email, name, action });
     
-    if (!email || !name) return res.status(400).json({ message: 'Email and name required' });
+    if (!email || !name) return res.status(400).json({ message: 'Correo electrónico y nombre requeridos' });
 
     let user = await userModel.findByEmail(email);
-    console.log('🔍 Usuario encontrado en Google Login:', user ? { id: user.idUser || user.id, email: user.email, active: user.active, auth_provider: user.auth_provider } : 'No encontrado');
+    console.log('🔍 Usuario encontrado en Google Auth:', user ? { id: user.idUser || user.id, email: user.email, active: user.active, auth_provider: user.auth_provider } : 'No encontrado');
     
-    // Si el usuario no existe, NO lo creamos - debe registrarse primero
+    // Si el usuario no existe
     if (!user) {
-      console.log('❌ Usuario no encontrado - debe registrarse');
-      return res.status(404).json({ 
-        message: 'No tienes una cuenta registrada. Por favor regístrate primero.',
-        requiresRegistration: true
+      // Si es un intento de LOGIN, rechazar
+      if (action === 'login') {
+        console.log('❌ Usuario no encontrado - debe registrarse');
+        return res.status(404).json({ 
+          message: 'No tienes una cuenta registrada. Por favor regístrate primero.',
+          requiresRegistration: true
+        });
+      }
+      
+      // Si es un intento de REGISTRO, crear el usuario
+      console.log('✅ Creando nuevo usuario con Google:', email);
+      user = await userModel.createUser({ 
+        name, 
+        email, 
+        password: null, // No se necesita password para Google
+        auth_provider: 'google' 
       });
-    }
-    
-    // Si el usuario existe pero se registró con email/password
-    const authMethod = user.auth_provider || 'email';
-    if (authMethod === 'email') {
-      console.log('❌ Usuario intentó login con Google pero se registró con email/password');
-      return res.status(409).json({ 
-        message: 'Este correo está registrado con email y contraseña. Por favor, inicia sesión con tu correo y contraseña.',
-        authProvider: 'email'
-      });
+      console.log('✅ Usuario creado con Google:', { id: user.idUser || user.id, email: user.email });
+    } else {
+      // El usuario ya existe
+      const authMethod = user.auth_provider || 'email';
+      
+      // Si el usuario se registró con email/password, no puede usar Google
+      if (authMethod === 'email') {
+        console.log('❌ Usuario intentó Google auth pero se registró con email/password');
+        return res.status(409).json({ 
+          message: 'Este correo está registrado con email y contraseña. Por favor, inicia sesión con tu correo y contraseña.',
+          authProvider: 'email'
+        });
+      }
+      
+      // Si es un intento de REGISTRO pero el usuario ya existe con Google
+      if (action === 'register') {
+        console.log('⚠️ Usuario ya existe con Google, procediendo como login');
+        // No rechazamos, simplemente hacemos login
+      }
     }
 
     // Verificar si el usuario está activo (solo si la propiedad existe)
     if (user.hasOwnProperty('active') && !user.active) {
       console.log('❌ Usuario desactivado:', user.email);
-      return res.status(403).json({ message: 'Your account has been deactivated. Please contact support.' });
+      return res.status(403).json({ message: 'Tu cuenta ha sido desactivada. Por favor, contacta a soporte.' });
     }
 
     const userId = user.idUser || user.id;
@@ -112,14 +133,14 @@ const loginGoogle = async (req, res, next) => {
     // Validar que tenemos un JWT secret válido
     if (!jwtSecret || jwtSecret.trim() === '') {
       console.log('❌ Error: JWT_SECRET no está configurado correctamente');
-      return res.status(500).json({ message: 'Server configuration error' });
+      return res.status(500).json({ message: 'Error de configuración del servidor' });
     }
     console.log('🔧 Intentando crear token con secret:', jwtSecret);
     console.log('🔧 Payload del token:', { id: userId, email: user.email, role: user.role, branch_id: branchId });
     
     const token = jwt.sign({ id: userId, email: user.email, role: user.role, branch_id: branchId }, jwtSecret, { expiresIn: '8h' });
     
-    console.log('✅ Google Login Token generado:', token.substring(0, 50) + '...');
+    console.log('✅ Google Auth Token generado:', token.substring(0, 50) + '...');
     
     return res.json({ 
       data: {

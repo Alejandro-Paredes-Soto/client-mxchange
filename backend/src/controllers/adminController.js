@@ -443,14 +443,48 @@ const changeTransactionStatus = async (req, res, next) => {
           } else {
             console.log(`✅ Transacción ${id} NO tiene ajuste previo. Procediendo con ajuste de inventario...`);
 
-            // Obtener datos completos de la transacción
+            // Obtener datos completos de la transacción (incluyendo method para saber si fue pago con tarjeta)
             const [txFullRows] = await connection.query(
-              'SELECT id, branch_id, type, amount_from, currency_from, amount_to, currency_to FROM transactions WHERE id = ?',
+              'SELECT id, branch_id, type, amount_from, currency_from, amount_to, currency_to, method FROM transactions WHERE id = ?',
               [id]
             );
             const txFull = txFullRows && txFullRows[0] ? txFullRows[0] : null;
 
             console.log(`📊 Datos de transacción ${id}:`, txFull);
+            
+            // Determinar si el pago fue con tarjeta/Stripe (el dinero va a Stripe, no al inventario físico)
+            // Verificamos de dos formas:
+            // 1. Si el method indica explícitamente "Tarjeta"
+            // 2. Si existe un pago confirmado en la tabla payments (pago por Stripe)
+            let isCardPayment = false;
+            
+            if (txFull) {
+              // Opción 1: Verificar por método (si indica tarjeta explícitamente)
+              const methodLower = (txFull.method || '').toLowerCase();
+              const methodIndicatesCard = methodLower === 'tarjeta' || 
+                methodLower.includes('tarjeta de') ||
+                methodLower.includes('card') ||
+                methodLower.includes('stripe');
+              
+              // Opción 2: Verificar si existe un pago Stripe confirmado para esta transacción
+              let hasStripePayment = false;
+              try {
+                const [paymentRows] = await connection.query(
+                  'SELECT id, stripe_payment_intent_id FROM payments WHERE transaction_id = ? AND status = ? LIMIT 1',
+                  [id, 'paid']
+                );
+                hasStripePayment = paymentRows && paymentRows.length > 0 && paymentRows[0].stripe_payment_intent_id;
+              } catch (payErr) {
+                console.warn('Error verificando pago Stripe:', payErr && payErr.message ? payErr.message : payErr);
+              }
+              
+              // Es pago con tarjeta si:
+              // - El método indica explícitamente "Tarjeta" O
+              // - Hay un pago Stripe confirmado (independientemente del método guardado)
+              isCardPayment = methodIndicatesCard || hasStripePayment;
+              
+              console.log(`💳 Verificación de pago - Method: "${txFull.method}", methodIndicatesCard: ${methodIndicatesCard}, hasStripePayment: ${hasStripePayment}, isCardPayment: ${isCardPayment}`);
+            }
 
             if (txFull) {
               // Obtener el inventory_id para registrar en inventory_adjustments
@@ -565,36 +599,49 @@ const changeTransactionStatus = async (req, res, next) => {
               }
 
               // 2. ACREDITAR lo que la sucursal recibe (currency_from, amount_from)
-              try {
-                const [invBeforeCredit] = await connection.query(
-                  'SELECT amount FROM inventory WHERE branch_id = ? AND currency = ? LIMIT 1',
-                  [txFull.branch_id, txFull.currency_from]
-                );
-                const oldAmountFrom = invBeforeCredit && invBeforeCredit[0] ? Number(invBeforeCredit[0].amount) : 0;
+              // IMPORTANTE: Solo omitir el crédito si fue pago con tarjeta Y es una COMPRA de dólares
+              // En una VENTA de dólares, el cliente entrega USD físicamente, así que SIEMPRE se acredita
+              // El pago con tarjeta solo aplica para COMPRAS (cliente paga MXN con tarjeta)
+              const shouldSkipCredit = isCardPayment && txFull.type === 'buy';
+              
+              if (shouldSkipCredit) {
+                console.log(`💳 Pago con tarjeta detectado para COMPRA (method: ${txFull.method}). NO se acredita ${txFull.amount_from} ${txFull.currency_from} al inventario físico (el dinero fue a Stripe).`);
+              } else {
+                // Pago en efectivo/transferencia O venta de dólares: SÍ acreditar al inventario
+                const creditReason = txFull.type === 'sell' 
+                  ? `Recepción de USD de cliente para transacción ${txFull.id}` 
+                  : `Recepción completada de transacción ${txFull.id} (efectivo/transferencia bancaria real)`;
+                try {
+                  const [invBeforeCredit] = await connection.query(
+                    'SELECT amount FROM inventory WHERE branch_id = ? AND currency = ? LIMIT 1',
+                    [txFull.branch_id, txFull.currency_from]
+                  );
+                  const oldAmountFrom = invBeforeCredit && invBeforeCredit[0] ? Number(invBeforeCredit[0].amount) : 0;
 
-                const [updateResult] = await connection.query(
-                  'UPDATE inventory SET amount = amount + ? WHERE branch_id = ? AND currency = ?',
-                  [txFull.amount_from, txFull.branch_id, txFull.currency_from]
-                );
+                  const [updateResult] = await connection.query(
+                    'UPDATE inventory SET amount = amount + ? WHERE branch_id = ? AND currency = ?',
+                    [txFull.amount_from, txFull.branch_id, txFull.currency_from]
+                  );
 
-                if (updateResult.affectedRows === 0) {
-                  console.error(`CRITICAL: No se pudo acreditar ${txFull.amount_from} ${txFull.currency_from} a branch ${txFull.branch_id}`);
-                } else {
-                  // Registrar en inventory_adjustments
-                  if (inventoryIdFrom) {
-                    try {
-                      await connection.query(
-                        'INSERT INTO inventory_adjustments (inventory_id, old_amount, new_amount, adjustment_type, reason, adjusted_by) VALUES (?, ?, ?, ?, ?, ?)',
-                        [inventoryIdFrom, oldAmountFrom, oldAmountFrom + txFull.amount_from, 'entry', `Recepción completada de transacción ${txFull.id}`, req.user?.id || null]
-                      );
-                    } catch (adjErr) {
-                      console.warn('Error registrando adjustment de entrada:', adjErr && adjErr.message ? adjErr.message : adjErr);
+                  if (updateResult.affectedRows === 0) {
+                    console.error(`CRITICAL: No se pudo acreditar ${txFull.amount_from} ${txFull.currency_from} a branch ${txFull.branch_id}`);
+                  } else {
+                    // Registrar en inventory_adjustments
+                    if (inventoryIdFrom) {
+                      try {
+                        await connection.query(
+                          'INSERT INTO inventory_adjustments (inventory_id, old_amount, new_amount, adjustment_type, reason, adjusted_by) VALUES (?, ?, ?, ?, ?, ?)',
+                          [inventoryIdFrom, oldAmountFrom, oldAmountFrom + txFull.amount_from, 'entry', creditReason, req.user?.id || null]
+                        );
+                      } catch (adjErr) {
+                        console.warn('Error registrando adjustment de entrada:', adjErr && adjErr.message ? adjErr.message : adjErr);
+                      }
                     }
+                    console.log(`✓ Acreditado ${txFull.amount_from} ${txFull.currency_from} a sucursal ${txFull.branch_id} (${txFull.type === 'sell' ? 'venta de USD' : 'efectivo/transferencia bancaria'})`);
                   }
-                  console.log(`✓ Acreditado ${txFull.amount_from} ${txFull.currency_from} a sucursal ${txFull.branch_id}`);
+                } catch (creditErr) {
+                  console.error('Error acreditando inventario al completar transacción:', creditErr && creditErr.message ? creditErr.message : creditErr);
                 }
-              } catch (creditErr) {
-                console.error('Error acreditando inventario al completar transacción:', creditErr && creditErr.message ? creditErr.message : creditErr);
               }
 
               // 3. Marcar reservas como committed
@@ -1012,7 +1059,7 @@ const createBranch = async (req, res, next) => {
     // Verificar si el email ya existe
     const [existingUsers] = await pool.query('SELECT idUser FROM users WHERE email = ?', [email]);
     if (existingUsers.length > 0) {
-      return res.status(400).json({ message: 'Email already in use' });
+      return res.status(400).json({ message: 'El correo electrónico ya está en uso', code: 'EMAIL_ALREADY_EXISTS' });
     }
 
     // Crear la sucursal primero
@@ -1025,6 +1072,12 @@ const createBranch = async (req, res, next) => {
     await pool.query(
       'INSERT INTO users (name, email, password, role, branch_id, active) VALUES (?, ?, ?, ?, ?, ?)',
       [name, email, hashedPassword, 'sucursal', branchId, true]
+    );
+
+    // Crear inventario inicial en 0 para USD y MXN
+    await pool.query(
+      'INSERT INTO inventory (branch_id, currency, amount, low_stock_threshold) VALUES (?, ?, ?, ?), (?, ?, ?, ?)',
+      [branchId, 'USD', 0, 1000, branchId, 'MXN', 0, 20000]
     );
 
     return res.json({ id: branchId });
@@ -1053,7 +1106,7 @@ const updateBranch = async (req, res, next) => {
         if (email && email !== users[0].email) {
           const [existingUsers] = await pool.query('SELECT idUser FROM users WHERE email = ? AND idUser != ?', [email, userId]);
           if (existingUsers.length > 0) {
-            return res.status(400).json({ message: 'Email already in use by another user' });
+            return res.status(400).json({ message: 'El correo electrónico ya está en uso por otro usuario', code: 'EMAIL_ALREADY_EXISTS' });
           }
         }
 

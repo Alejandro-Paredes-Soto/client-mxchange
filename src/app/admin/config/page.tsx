@@ -7,6 +7,7 @@ import { Input } from '../../../components/ui/input';
 import { NumberInput } from '../../../components/ui/number-input';
 import { Label } from '../../../components/ui/label';
 import { Button } from '../../../components/ui/button';
+import { Eye, EyeOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   Dialog,
@@ -44,16 +45,23 @@ const AdminConfigPage = () => {
   const [isDeleteBranchOpen, setIsDeleteBranchOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [showPasswordAdd, setShowPasswordAdd] = useState(false);
+  const [showPasswordEdit, setShowPasswordEdit] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<number | null>(null);
   const [newBranchData, setNewBranchData] = useState({
     name: '',
     address: '',
+    city: '',
+    state: '',
     email: '',
     password: ''
   });
   const [editBranchData, setEditBranchData] = useState({
     name: '',
     address: '',
+    city: '',
+    state: '',
     email: '',
     password: ''
   });
@@ -140,6 +148,14 @@ const AdminConfigPage = () => {
       toast.error('La dirección es requerida');
       return;
     }
+    if (!newBranchData.city.trim()) {
+      toast.error('La ciudad es requerida');
+      return;
+    }
+    if (!newBranchData.state.trim()) {
+      toast.error('El estado es requerido');
+      return;
+    }
     if (!newBranchData.email.trim()) {
       toast.error('El email es requerido');
       return;
@@ -157,7 +173,7 @@ const AdminConfigPage = () => {
       const b = await listBranchesAdmin(token);
       setBranches(b);
       setIsAddBranchOpen(false);
-      setNewBranchData({ name: '', address: '', email: '', password: '' });
+      setNewBranchData({ name: '', address: '', city: '', state: '', email: '', password: '' });
     }
   };
 
@@ -174,6 +190,14 @@ const AdminConfigPage = () => {
       toast.error('La dirección es requerida');
       return;
     }
+    if (!editBranchData.city.trim()) {
+      toast.error('La ciudad es requerida');
+      return;
+    }
+    if (!editBranchData.state.trim()) {
+      toast.error('El estado es requerido');
+      return;
+    }
     if (!editBranchData.email.trim()) {
       toast.error('El email es requerido');
       return;
@@ -182,6 +206,8 @@ const AdminConfigPage = () => {
     const payload: any = {
       name: editBranchData.name,
       address: editBranchData.address,
+      city: editBranchData.city,
+      state: editBranchData.state,
       email: editBranchData.email
     };
 
@@ -192,14 +218,19 @@ const AdminConfigPage = () => {
 
     const result = await updateBranch(id, payload, token);
     if (result && result.error) {
-      toast.error(result.error.message || 'Error al actualizar sucursal');
+      // Manejar error específico de email duplicado
+      if (result.error.code === 'EMAIL_ALREADY_EXISTS' || result.error.message?.includes('correo') || result.error.message?.includes('Email already')) {
+        toast.error('El correo electrónico ya está registrado. Por favor, usa otro correo.');
+      } else {
+        toast.error(result.error.message || 'Error al actualizar sucursal');
+      }
     } else {
       toast.success('Sucursal actualizada correctamente');
       const b = await listBranchesAdmin(token);
       setBranches(b);
       setIsEditBranchOpen(false);
       setSelectedBranch(null);
-      setEditBranchData({ name: '', address: '', email: '', password: '' });
+      setEditBranchData({ name: '', address: '', city: '', state: '', email: '', password: '' });
     }
   };
 
@@ -224,6 +255,8 @@ const AdminConfigPage = () => {
     setEditBranchData({
       name: branch.name,
       address: branch.address,
+      city: branch.city || '',
+      state: branch.state || '',
       email: branch.user_email || '',
       password: ''
     });
@@ -360,7 +393,7 @@ const AdminConfigPage = () => {
             <Button
               onClick={onUpdateRates}
               size="default"
-              className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
+              className="cursor-pointer"
             >
               Guardar Tasas
             </Button>
@@ -393,7 +426,7 @@ const AdminConfigPage = () => {
               <Button
                 onClick={onUpdateCommission}
                 size="default"
-                className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
+                className="cursor-pointer"
               >
                 Guardar Comisión
               </Button>
@@ -413,7 +446,7 @@ const AdminConfigPage = () => {
               </div>
               <Dialog open={isAddBranchOpen} onOpenChange={setIsAddBranchOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent">
+                  <Button className="cursor-pointer">
                     Agregar Sucursal
                   </Button>
                 </DialogTrigger>
@@ -443,6 +476,26 @@ const AdminConfigPage = () => {
                         placeholder="Ej: Av. Principal #123"
                       />
                     </div>
+                    <div className="gap-4 grid grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="branch-city">Ciudad</Label>
+                        <Input
+                          id="branch-city"
+                          value={newBranchData.city}
+                          onChange={(e) => setNewBranchData({ ...newBranchData, city: e.target.value })}
+                          placeholder="Ej: Ciudad de México"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="branch-state">Estado</Label>
+                        <Input
+                          id="branch-state"
+                          value={newBranchData.state}
+                          onChange={(e) => setNewBranchData({ ...newBranchData, state: e.target.value })}
+                          placeholder="Ej: CDMX"
+                        />
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="branch-email">Email del Usuario</Label>
                       <Input
@@ -455,13 +508,25 @@ const AdminConfigPage = () => {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="branch-password">Contraseña</Label>
-                      <Input
-                        id="branch-password"
-                        type="password"
-                        value={newBranchData.password}
-                        onChange={(e) => setNewBranchData({ ...newBranchData, password: e.target.value })}
-                        placeholder="•••••••••"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="branch-password"
+                          type={showPasswordAdd ? 'text' : 'password'}
+                          value={newBranchData.password}
+                          onChange={(e) => setNewBranchData({ ...newBranchData, password: e.target.value })}
+                          placeholder="•••••••••"
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="top-0 right-0 absolute hover:bg-transparent px-3 py-2 h-full"
+                          onClick={() => setShowPasswordAdd(!showPasswordAdd)}
+                        >
+                          {showPasswordAdd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                   <DialogFooter>
@@ -469,14 +534,15 @@ const AdminConfigPage = () => {
                       variant="outline"
                       onClick={() => {
                         setIsAddBranchOpen(false);
-                        setNewBranchData({ name: '', address: '', email: '', password: '' });
+                        setNewBranchData({ name: '', address: '', city: '', state: '', email: '', password: '' });
                       }}
+                      className="cursor-pointer"
                     >
                       Cancelar
                     </Button>
                     <Button
                       onClick={onAddBranch}
-                      className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
+                      className="cursor-pointer"
                     >
                       Crear Sucursal
                     </Button>
@@ -500,6 +566,11 @@ const AdminConfigPage = () => {
                     <div className="space-y-1">
                       <p className="font-medium">{b.name}</p>
                       <p className="text-muted-foreground text-sm">{b.address}</p>
+                      {(b.city || b.state) && (
+                        <p className="text-muted-foreground text-sm">
+                          {[b.city, b.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
                       {b.user_email && (
                         <p className="text-muted-foreground text-xs">
                           Usuario: {b.user_email}
@@ -511,6 +582,7 @@ const AdminConfigPage = () => {
                         onClick={() => openEditDialog(b)}
                         variant="secondary"
                         size="sm"
+                        className="text-white cursor-pointer"
                       >
                         Editar
                       </Button>
@@ -518,6 +590,7 @@ const AdminConfigPage = () => {
                         onClick={() => openDeleteDialog(b.id)}
                         variant="destructive"
                         size="sm"
+                        className="text-white cursor-pointer"
                       >
                         Eliminar
                       </Button>
@@ -529,34 +602,7 @@ const AdminConfigPage = () => {
           </CardContent>
         </Card>
 
-        {/* Configuración de Alertas */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Configuración de Alertas</CardTitle>
-            <CardDescription>
-              Administra los emails que recibirán notificaciones del sistema
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="font-medium text-sm">Emails configurados</Label>
-                <div className="bg-muted p-3 rounded-md">
-                  <p className="font-mono text-sm">
-                    {alertEmails || 'No hay emails configurados'}
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={onUpdateAlerts}
-                size="default"
-                className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
-              >
-                Actualizar Emails
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+       
       </div>
 
       {/* Dialog para editar sucursal */}
@@ -587,6 +633,26 @@ const AdminConfigPage = () => {
                 placeholder="Ej: Av. Principal #123"
               />
             </div>
+            <div className="gap-4 grid grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="edit-branch-city">Ciudad</Label>
+                <Input
+                  id="edit-branch-city"
+                  value={editBranchData.city}
+                  onChange={(e) => setEditBranchData({ ...editBranchData, city: e.target.value })}
+                  placeholder="Ej: Ciudad de México"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-branch-state">Estado</Label>
+                <Input
+                  id="edit-branch-state"
+                  value={editBranchData.state}
+                  onChange={(e) => setEditBranchData({ ...editBranchData, state: e.target.value })}
+                  placeholder="Ej: CDMX"
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-branch-email">Email del Usuario</Label>
               <Input
@@ -599,13 +665,25 @@ const AdminConfigPage = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-branch-password">Nueva Contraseña (opcional)</Label>
-              <Input
-                id="edit-branch-password"
-                type="password"
-                value={editBranchData.password}
-                onChange={(e) => setEditBranchData({ ...editBranchData, password: e.target.value })}
-                placeholder="Dejar vacío para no cambiar"
-              />
+              <div className="relative">
+                <Input
+                  id="edit-branch-password"
+                  type={showPasswordEdit ? 'text' : 'password'}
+                  value={editBranchData.password}
+                  onChange={(e) => setEditBranchData({ ...editBranchData, password: e.target.value })}
+                  placeholder="Dejar vacío para no cambiar"
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="top-0 right-0 absolute hover:bg-transparent px-3 py-2 h-full"
+                  onClick={() => setShowPasswordEdit(!showPasswordEdit)}
+                >
+                  {showPasswordEdit ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
               <p className="text-muted-foreground text-xs">
                 Solo ingresa una contraseña si deseas cambiarla
               </p>
@@ -617,14 +695,15 @@ const AdminConfigPage = () => {
               onClick={() => {
                 setIsEditBranchOpen(false);
                 setSelectedBranch(null);
-                setEditBranchData({ name: '', address: '', email: '', password: '' });
+                setEditBranchData({ name: '', address: '', city: '', state: '', email: '', password: '' });
               }}
+              className="cursor-pointer"
             >
               Cancelar
             </Button>
             <Button
               onClick={() => selectedBranch && onUpdateBranch(selectedBranch)}
-              className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
+              className="cursor-pointer"
             >
               Guardar Cambios
             </Button>
@@ -651,7 +730,7 @@ const AdminConfigPage = () => {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => selectedBranch && onDeleteBranch(selectedBranch)}
-              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground cursor-pointer"
             >
               Eliminar
             </AlertDialogAction>
@@ -671,18 +750,30 @@ const AdminConfigPage = () => {
           <div className="gap-4 grid py-4">
             <div className="space-y-2">
               <Label htmlFor="password-confirm">Contraseña</Label>
-              <Input
-                id="password-confirm"
-                type="password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Ingresa tu contraseña"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    confirmUpdateCommission();
-                  }
-                }}
-              />
+              <div className="relative">
+                <Input
+                  id="password-confirm"
+                  type={showPasswordConfirm ? 'text' : 'password'}
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="Ingresa tu contraseña"
+                  className="pr-10"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      confirmUpdateCommission();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="top-0 right-0 absolute hover:bg-transparent px-3 py-2 h-full"
+                  onClick={() => setShowPasswordConfirm(!showPasswordConfirm)}
+                >
+                  {showPasswordConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -692,12 +783,13 @@ const AdminConfigPage = () => {
                 setIsPasswordDialogOpen(false);
                 setPasswordInput('');
               }}
+              className="cursor-pointer"
             >
               Cancelar
             </Button>
             <Button
               onClick={confirmUpdateCommission}
-              className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent"
+              className="cursor-pointer"
             >
               Confirmar
             </Button>

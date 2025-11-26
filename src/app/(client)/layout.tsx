@@ -31,8 +31,8 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const [notifOpen, setNotifOpen] = useState(false);
 
   const menuItems = [
-    { title: "Comprar dólares", url: "/inicio?mode=buy", icon: DollarSign },
-    { title: "Vender dólares", url: "/inicio?mode=sell", icon: ArrowLeftRight },
+    { title: "Comprar dólares", url: "/operacion?mode=buy", icon: DollarSign },
+    { title: "Vender dólares", url: "/operacion?mode=sell", icon: ArrowLeftRight },
     { title: "Mis movimientos", url: "/mis-movimientos", icon: History },
   ];
 
@@ -67,12 +67,14 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
       <Sidebar>
         <SidebarHeader>
           <div className="flex items-center gap-2 px-4 py-2">
-            <h2
-              className="font-semibold text-lg cursor-pointer"
+            <div
+              className="text-center cursor-pointer"
               onClick={() => router.push('/inicio')}
             >
-              MXChange
-            </h2>
+              <h1 className="font-bold text-primary text-xl">
+                M<span className="text-secondary text-2xl">X</span>ange
+              </h1>
+            </div>
           </div>
         </SidebarHeader>
         <SidebarContent>
@@ -86,7 +88,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
                       asChild
                       isActive={pathname === item.url}
                     >
-                      <Link href={item.url}>
+                      <Link href={item.url} className="cursor-pointer">
                         <item.icon className="w-4 h-4" />
                         <span>{item.title}</span>
                       </Link>
@@ -98,12 +100,13 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
           </SidebarGroup>
         </SidebarContent>
         <div className="mt-auto px-4 py-4">
+          <hr className="mb-4 border-gray-300" />
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-2 w-full text-red-600 hover:text-red-700 text-sm"
+                  className="flex items-center gap-2 w-full text-red-600 hover:text-red-700 text-sm cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>Cerrar sesión</span>

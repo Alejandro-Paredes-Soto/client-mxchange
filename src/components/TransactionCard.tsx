@@ -29,7 +29,7 @@ const formatAmount = (n: number) => Number(n).toFixed(2);
 const humanizeMethod = (m?: string) => {
   if (!m) return 'N/A';
   const v = m.toLowerCase();
-  if (v.includes('transfer') || v.includes('transferencia')) return 'Transferencia';
+  if (v.includes('tarjeta') || v.includes('card')) return 'Tarjeta';
   if (v.includes('vent') || v.includes('cash') || v.includes('efectivo') || v.includes('sucursal')) return 'Ventanilla';
   return m;
 };

@@ -130,6 +130,12 @@ const ForgotPasswordContent = () => {
   return (
     <div className="flex justify-center items-center p-4 w-full min-h-screen">
       <Card className="w-full max-w-md">
+        <div className="mb-4 text-center">
+            <h1 className="font-bold text-primary text-4xl md:text-5xl">
+              M<span className="text-secondary text-5xl md:text-6xl">X</span>ange
+            </h1>
+            <p className="mt-2 font-light text-gray-600 text-sm md:text-base">Compra y vende divisas al mejor precio</p>
+          </div>
         <CardHeader className="space-y-1">
           <CardTitle className="font-bold text-2xl text-center">
             ¿Olvidaste tu contraseña?

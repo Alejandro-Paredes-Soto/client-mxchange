@@ -13,6 +13,12 @@ const PasswordResetEmail = ({ resetLink, userName }) => {
       </head>
       <body style="margin: 0; padding: 0; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Ubuntu, sans-serif;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="margin-bottom: 16px; text-align: center;">
+            <h1 style="font-weight: bold; font-size: 36px; color: #064;">
+              M<span style="font-size: 48px; color: #00a86b;">X</span>ange
+            </h1>
+            <p style="margin-top: 8px; font-weight: 300; color: #666; font-size: 14px;">Compra y vende divisas al mejor precio</p>
+          </div>
           <h1 style="color: #000000; font-size: 24px; font-weight: 600; margin: 40px 0 20px; padding: 0 0 16px 0; border-bottom: 1px solid #e5e7eb;">
             Restablecer Contraseña
           </h1>

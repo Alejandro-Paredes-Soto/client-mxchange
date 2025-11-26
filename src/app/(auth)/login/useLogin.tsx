@@ -232,6 +232,12 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
       
       // Establecer la bandera en localStorage para que inicio/page.tsx sepa que es login de Google
       localStorage.setItem("authGoogle", "true");
+      
+      // Guardar el action (login o register) en una cookie para que NextAuth lo use
+      // Las cookies son accesibles desde el servidor (a diferencia de localStorage)
+      const googleAction = activeForm === 'register' ? 'register' : 'login';
+      Cookies.set('googleAuthAction', googleAction, { path: '/', expires: 1/24 }); // Expira en 1 hora
+      console.log('🔐 Iniciando Google Auth con action:', googleAction);
 
       // Dejar que NextAuth maneje la redirección automáticamente
       await signIn("google", { callbackUrl: "/inicio" });
@@ -241,6 +247,7 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
       const errorMessage = error?.message || 'Error al iniciar sesión con Google.';
       toast.error(errorMessage);
       localStorage.removeItem("authGoogle");
+      Cookies.remove('googleAuthAction');
     }
   }
 

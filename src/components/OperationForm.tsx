@@ -99,7 +99,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       let result = operationType === 'buy'
         ? numAmount / rateEff
         : numAmount * rateEff;
-      
+
       // Si el resultado es MXN (venta), redondearlo sin centavos
       if (operationType === 'sell') {
         result = roundMXN(result);
@@ -121,7 +121,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       let result = operationType === 'buy'
         ? numAmount * rateEff
         : numAmount / rateEff;
-      
+
       // Si el resultado es MXN (compra), redondearlo sin centavos
       if (operationType === 'buy') {
         result = roundMXN(result);
@@ -406,7 +406,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         <h3 className="font-semibold text-primary text-lg">Generar Orden</h3>
         <div className="flex sm:flex-row flex-col items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <button
-            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-gradient-primary-to-accent text-white' : 'bg-white text-primary border border-light-green'}`}
+            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
             onClick={() => {
               setOperationType('buy');
               setFromCurrency('MXN');
@@ -419,7 +419,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
             Quiero Comprar Dólares
           </button>
           <button
-            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-gradient-primary-to-accent text-white' : 'bg-white text-primary border border-light-green'}`}
+            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
             onClick={() => {
               setOperationType('sell');
               setFromCurrency('USD');
@@ -549,8 +549,8 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         </div>
 
         {/* Branch and Method */}
-        <div className="gap-3 grid grid-cols-1 sm:grid-cols-2">
-          <div>
+        <div className="flex sm:flex-row flex-col gap-3">
+          <div className="flex-1">
             <label htmlFor="branch" className="block mb-2 font-medium text-primary">Sucursal:</label>
             <select id="branch" value={branchId} onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" disabled={isLoading}>
               {branches.length > 0 ? (
@@ -563,11 +563,12 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
           {/* Method only shows when buying USD */}
           {operationType === 'buy' && (
-            <div>
+            <div className="flex-1">
               <label htmlFor="method" className="block mb-2 font-medium text-primary">Método de Pago:</label>
               <select id="method" value={method} onChange={(e) => setMethod(e.target.value)} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" disabled={isLoading}>
-                <option>En sucursal</option>
-                <option>Transferencia bancaria / Tarjeta de cto/dto</option>
+                <option value="En sucursal">En sucursal (efectivo)</option>
+
+                <option value="Tarjeta">Tarjeta de débito/prepago</option>
               </select>
             </div>
           )}
@@ -584,7 +585,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         {/* Action Button */}
         <div className="mt-2">
           <button
-            className="bg-gradient-primary-to-accent hover:bg-gradient-primary-to-accent disabled:opacity-50 px-4 py-3 rounded-lg w-full font-medium text-white transition-all hover:-translate-y-1 cursor-pointer disabled:cursor-not-allowed"
+            className="bg-primary hover:bg-primary/90 disabled:opacity-50 px-4 py-3 rounded-lg w-full font-medium text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
             onClick={onReserve}
             disabled={isLoading}
           >

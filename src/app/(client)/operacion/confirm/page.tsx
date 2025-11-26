@@ -5,7 +5,7 @@ import { listTransactionsMock, Transaction, getUserTransactions, BackendTransact
 import { humanizeStatus, getStatusColor } from '@/lib/statuses';
 
 import Cookies from 'js-cookie';
-import { CreditCard, Banknote } from 'lucide-react';
+import { CreditCard, Banknote, AlertCircle } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 import Link from 'next/link';
@@ -13,6 +13,7 @@ import Image from 'next/image';
 import { getSocket } from '@/lib/socket';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 // types for TSX loosened (file is .tsx but project may not strictly type everything)
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
@@ -20,7 +21,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 const humanizeMethod = (m?: string) => {
   if (!m) return 'N/A';
   const v = m.toLowerCase();
-  if (v.includes('transfer') || v.includes('transferencia')) return 'Transferencia bancaria';
+  if (v.includes('card') || v.includes('tarjeta')) return 'Tarjeta';
   if (v.includes('vent') || v.includes('cash') || v.includes('efectivo') || v.includes('sucursal')) return 'En sucursal';
   return m;
 };
@@ -30,29 +31,29 @@ const humanizeMethod = (m?: string) => {
  */
 const detectCardType = (cardNumber: string): string => {
   const cleaned = cardNumber.replace(/\s+/g, '').replace(/-/g, '');
-  
+
   // Visa: empieza con 4
   if (/^4/.test(cleaned)) return 'visa';
-  
+
   // Mastercard: 51-55, 2221-2720
   if (/^5[1-5]/.test(cleaned) || /^2(22[1-9]|2[3-9][0-9]|[3-6][0-9]{2}|7[01][0-9]|720)/.test(cleaned)) {
     return 'mastercard';
   }
-  
+
   // American Express: 34 o 37
   if (/^3[47]/.test(cleaned)) return 'amex';
-  
+
   // Discover: 6011, 622126-622925, 644-649, 65
   if (/^6011|^622(12[6-9]|1[3-9][0-9]|[2-8][0-9]{2}|9[01][0-9]|92[0-5])|^64[4-9]|^65/.test(cleaned)) {
     return 'discover';
   }
-  
+
   // Diners Club: 36, 38, 300-305
   if (/^3(6|8|0[0-5])/.test(cleaned)) return 'diners';
-  
+
   // JCB: 2131, 1800, 35
   if (/^(2131|1800|35)/.test(cleaned)) return 'jcb';
-  
+
   return 'unknown';
 };
 
@@ -62,12 +63,12 @@ const detectCardType = (cardNumber: string): string => {
 const formatCardNumber = (value: string): string => {
   const cleaned = value.replace(/\s+/g, '').replace(/[^0-9]/g, '');
   const cardType = detectCardType(cleaned);
-  
+
   // American Express usa formato 4-6-5
   if (cardType === 'amex') {
     return cleaned.replace(/(\d{4})(\d{6})(\d{5})/, '$1 $2 $3').trim();
   }
-  
+
   // Otros usan formato 4-4-4-4
   return cleaned.replace(/(\d{4})/g, '$1 ').trim();
 };
@@ -135,17 +136,17 @@ const ConfirmPage = () => {
 
     const handleTransactionUpdate = (payload: any) => {
       console.log('transaction.updated recibido en ConfirmPage:', payload);
-      
+
       // Verificar si es la transacción actual
       const payloadTxCode = payload.transaction_code || payload.code || payload.id;
-      
+
       if (payloadTxCode && String(payloadTxCode) === String(txId)) {
         const newStatus = humanizeStatus(payload.status, tx.type === 'buy' ? 'buy_card' : 'sell_cash');
-        
+
         toast.success('Estado actualizado', {
           description: `Tu transacción cambió a: ${newStatus}`,
         });
-        
+
         // Actualizar el estado local
         setTx(prev => prev ? { ...prev, status: newStatus as any } : null);
       }
@@ -153,16 +154,16 @@ const ConfirmPage = () => {
 
     const handleStatusChange = (payload: any) => {
       console.log('transaction.status_changed recibido en ConfirmPage:', payload);
-      
+
       const payloadTxCode = payload.transaction_code;
-      
+
       if (payloadTxCode && String(payloadTxCode) === String(txId)) {
         const newStatus = humanizeStatus(payload.new_status || payload.status, tx.type === 'buy' ? 'buy_card' : 'sell_cash');
-        
+
         toast.success('Estado actualizado', {
           description: `Tu transacción cambió a: ${newStatus}`,
         });
-        
+
         setTx(prev => prev ? { ...prev, status: newStatus as any } : null);
       }
     };
@@ -190,7 +191,25 @@ const ConfirmPage = () => {
     router.push(`/operacion/confirm/checkout?txId=${encodeURIComponent(txCode)}`);
   };
 
-  if (!tx) return <div>No se encontró la transacción.</div>;
+  if (!tx) {
+    return (
+      <section className="mx-auto p-6 max-w-6xl">
+        <div className="mb-8">
+          <Button variant="ghost" onClick={() => router.back()} className="mb-6 cursor-pointer">
+            <svg className="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Regresar
+          </Button>
+          <Alert>
+            <AlertCircle className="w-4 h-4" />
+            <AlertTitle>No se encontró la transacción</AlertTitle>
+            <AlertDescription>La transacción que buscas no existe o ha expirado.</AlertDescription>
+          </Alert>
+        </div>
+      </section>
+    );
+  }
 
   // Mostrar QR siempre cuando exista tx.id
   const qrUrl = tx.id ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(tx.id)}` : null;
@@ -219,8 +238,8 @@ const ConfirmPage = () => {
   const toLabel = 'Recibes';
   // Ocultar métodos de pago si la transacción ya está pagada o completada
   const humanStatus = (tx.status || '').toString().toLowerCase();
-  const hidePaymentMethod = humanStatus.includes('pagado') || humanStatus.includes('paid') 
-    || humanStatus.includes('listo para recoger') || humanStatus.includes('ready_for_pickup') 
+  const hidePaymentMethod = humanStatus.includes('pagado') || humanStatus.includes('paid')
+    || humanStatus.includes('listo para recoger') || humanStatus.includes('ready_for_pickup')
     || humanStatus.includes('ready_to_receive') || humanStatus.includes('listo para recibir')
     || humanStatus.includes('completed') || humanStatus.includes('completado')
     || humanStatus.includes('cancelled') || humanStatus.includes('cancelado')
@@ -270,7 +289,7 @@ const ConfirmPage = () => {
                 <div className="font-semibold text-sm">{tx.status}</div>
               </div>
             </div>
-            
+
             <div className="mb-6 text-muted-foreground text-sm">
               <span className="font-medium">Fecha:</span> {formatPrettyDate(tx.createdAt)}
             </div>
@@ -330,26 +349,26 @@ const ConfirmPage = () => {
             <div className="bg-card shadow-sm p-8 border rounded-lg">
               <h2 className="mb-6 font-semibold text-primary text-xl">Método de Pago</h2>
 
-              {tx.method.toLowerCase().includes('transfer') ? (
+              {tx.method.toLowerCase().includes('tarjeta') ? (
                 <div>
                   <p className="mb-6 text-muted-foreground">Selecciona cómo quieres completar tu pago:</p>
                   <div className="flex flex-col gap-4">
                     <Button
                       onClick={goToStripeCheckout}
                       size="lg"
-                      className="w-full h-14 text-base"
+                      className="w-full h-14 text-base cursor-pointer"
                     >
                       <CreditCard className="mr-2 w-5 h-5" />
                       Pagar con Tarjeta
                     </Button>
-                    <Button
+                    {/* <Button
                       variant="outline"
                       size="lg"
                       className="w-full h-14 text-base"
                     >
                       <Banknote className="mr-2 w-5 h-5" />
                       Transferencia Bancaria
-                    </Button>
+                    </Button> */}
                   </div>
                 </div>
               ) : (
@@ -424,18 +443,18 @@ const ConfirmPage = () => {
               )}
 
               {/* Mostrar próximos pasos solo si no está completado, cancelado o expirado */}
-              {!humanStatus.includes('completed') && !humanStatus.includes('completado') && 
-               !humanStatus.includes('cancelled') && !humanStatus.includes('cancelado') && 
-               !humanStatus.includes('expired') && !humanStatus.includes('expirado') && (
-                <div className="bg-muted/50 mt-6 p-5 border rounded-md">
-                  <p className="mb-3 font-semibold text-sm">Próximos pasos:</p>
-                  <ol className="space-y-2 text-muted-foreground text-sm list-decimal list-inside">
-                    <li>Acude a la sucursal seleccionada</li>
-                    <li>Presenta este código QR</li>
-                    <li>Completa tu operación</li>
-                  </ol>
-                </div>
-              )}
+              {!humanStatus.includes('completed') && !humanStatus.includes('completado') &&
+                !humanStatus.includes('cancelled') && !humanStatus.includes('cancelado') &&
+                !humanStatus.includes('expired') && !humanStatus.includes('expirado') && (
+                  <div className="bg-muted/50 mt-6 p-5 border rounded-md">
+                    <p className="mb-3 font-semibold text-sm">Próximos pasos:</p>
+                    <ol className="space-y-2 text-muted-foreground text-sm list-decimal list-inside">
+                      <li>Acude a la sucursal seleccionada</li>
+                      <li>Presenta este código QR</li>
+                      <li>Completa tu operación</li>
+                    </ol>
+                  </div>
+                )}
             </div>
           </div>
         )}

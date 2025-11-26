@@ -155,7 +155,7 @@ const AdminIndex = () => {
   };
 
   return (
-    <section className="p-5">
+    <section className="">
       <header className="flex sm:flex-row flex-col justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="font-bold text-primary text-3xl">Dashboard Admin</h1>

@@ -9,6 +9,14 @@ const TransactionCompletedEmail = ({ transactionData }) => {
     React.createElement(Head),
     React.createElement(Body, { style: main },
       React.createElement(Container, { style: container },
+        React.createElement('div', { style: { marginBottom: '16px', textAlign: 'center' } },
+          React.createElement('h1', { style: { fontWeight: 'bold', fontSize: '36px', color: '#064' } },
+            'M',
+            React.createElement('span', { style: { fontSize: '48px', color: '#00a86b' } }, 'X'),
+            'ange'
+          ),
+          React.createElement('p', { style: { marginTop: '8px', fontWeight: '300', color: '#666', fontSize: '14px' } }, 'Compra y vende divisas al mejor precio')
+        ),
         React.createElement(Heading, { style: h1 }, '¡Operación Completada!'),
         React.createElement(Text, { style: text },
           'Tu operación ha sido completada exitosamente.'

@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { humanizeStatus, getStatusColor } from '../../../../lib/statuses';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { ArrowRight, Building2, Calendar, CreditCard, Hash, TrendingUp } from 'lucide-react';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { ArrowRight, Building2, Calendar, CreditCard, Hash, TrendingUp, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { putTransactionStatus } from '../../../services/api';
 import { getSocket } from '@/lib/socket';
@@ -17,6 +18,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
 export default function AdminTransactionDetail() {
   const params = useParams();
+  const router = useRouter();
   const rawTxId = params?.txId;
   const txId = Array.isArray(rawTxId) ? rawTxId[0] : rawTxId;
   const [tx, setTx] = useState<Record<string, unknown> | null>(null);
@@ -164,13 +166,25 @@ export default function AdminTransactionDetail() {
     </div>
   );
   
-  if (!tx) return (
-    <div className="mx-auto p-6 max-w-5xl">
-      <Card className="p-8 text-center">
-        <p className="text-muted-foreground">No se encontró la transacción.</p>
-      </Card>
-    </div>
-  );
+  if (!tx) {
+    return (
+      <section className="mx-auto p-6 max-w-5xl">
+        <div className="mb-8">
+          <Button variant="ghost" onClick={() => router.back()} className="mb-6 cursor-pointer">
+            <svg className="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Regresar
+          </Button>
+          <Alert>
+            <AlertCircle className="w-4 h-4" />
+            <AlertTitle>No se encontró la transacción</AlertTitle>
+            <AlertDescription>La transacción que buscas no existe o ha expirado.</AlertDescription>
+          </Alert>
+        </div>
+      </section>
+    );
+  }
 
   const amountFrom = Number(getValue('amount_from') ?? getValue('amountFrom') ?? tx.amount_from ?? tx.amountFrom ?? 0);
   const amountTo = Number(getValue('amount_to') ?? getValue('amountTo') ?? tx.amount_to ?? tx.amountTo ?? 0);

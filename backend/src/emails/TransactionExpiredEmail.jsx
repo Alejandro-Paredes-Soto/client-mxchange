@@ -30,6 +30,12 @@ export const TransactionExpiredEmail = ({
       <Preview>Tu reserva {transaction_code} ha expirado</Preview>
       <Body style={main}>
         <Container style={container}>
+          <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+            <h1 style={{ fontWeight: 'bold', fontSize: '36px', color: '#064' }}>
+              M<span style={{ fontSize: '48px', color: '#00a86b' }}>X</span>ange
+            </h1>
+            <p style={{ marginTop: '8px', fontWeight: '300', color: '#666', fontSize: '14px' }}>Compra y vende divisas al mejor precio</p>
+          </div>
           <Heading style={h1}>⏰ Reserva Expirada</Heading>
           
           <Text style={text}>Hola {name},</Text>
