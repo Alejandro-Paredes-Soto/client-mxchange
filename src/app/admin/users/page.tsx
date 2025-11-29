@@ -116,7 +116,7 @@ const AdminUsersPage = () => {
   };
 
   return (
-    <div className="mx-auto px-4 py-8 max-w-7xl container">
+    <div className="mx-auto px-4 py-8 max-w-6xl container">
       <div className="mb-8">
         <h1 className="font-bold text-primary text-3xl tracking-tight">Gestión de Usuarios</h1>
         <p className="mt-2 text-muted-foreground">

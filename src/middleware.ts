@@ -26,6 +26,9 @@ export async function middleware(request: NextRequest) {
     let isAuthenticated = false;
     let userRole: string | undefined;
 
+    // Variable para rastrear si el token JWT expiró
+    let tokenExpired = false;
+
     // Primero verificar token de NextAuth (Google OAuth)
     if (nextAuthToken) {
         isAuthenticated = true;
@@ -41,24 +44,22 @@ export async function middleware(request: NextRequest) {
             isAuthenticated = true;
             userRole = (payload as { role?: string }).role;
             console.log('[middleware] Usuario autenticado con token. Rol:', userRole);
-        } catch (err) {
-            console.error('[middleware] Token inválido o expirado:', err);
+        } catch (err: any) {
+            console.error('[middleware] Token inválido o expirado:', err?.code || err);
             isAuthenticated = false;
+            // Marcar que el token expiró para limpiar la cookie
+            if (err?.code === 'ERR_JWT_EXPIRED') {
+                tokenExpired = true;
+            }
         }
     }
 
-    if (token) {
-        try {
-            const { payload } = await jwtVerify(token, jwtSecret, {
-                algorithms: ['HS256']
-            });
-            isAuthenticated = true;
-            userRole = (payload as { role?: string }).role;
-            console.log('[middleware] Usuario autenticado. Rol:', userRole);
-        } catch (err) {
-            console.error('[middleware] Token inválido o expirado:', err);
-            isAuthenticated = false;
-        }
+    // Si el token expiró, limpiar la cookie y redirigir a login
+    if (tokenExpired) {
+        console.log('[middleware] Token expirado, limpiando cookie y redirigiendo a /login');
+        const response = NextResponse.redirect(new URL('/login', request.url));
+        response.cookies.delete('token');
+        return response;
     }
 
     // Definir rutas públicas (auth)

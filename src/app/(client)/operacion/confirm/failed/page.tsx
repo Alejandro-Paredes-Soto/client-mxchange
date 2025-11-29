@@ -1,13 +1,16 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
 export default function FailedPage() {
   const params = useSearchParams();
   const txCode = params.get('txId');
+  const router = useRouter();
   const [status, setStatus] = useState<any>(null);
 
   useEffect(() => {
@@ -25,8 +28,14 @@ export default function FailedPage() {
   }, [txCode]);
 
   return (
-    <section className="mx-auto p-6 max-w-3xl">
-      <h1 className="mb-4 font-bold text-red-600 text-2xl">Pago fallido</h1>
+    <section className="mx-auto max-w-3xl">
+      <div className="mb-6">
+        <Button variant="ghost" className="mb-4" onClick={() => router.back()}>
+          <ArrowLeft className="mr-2 w-4 h-4" />
+          Regresar
+        </Button>
+        <h1 className="mb-4 font-bold text-red-600 text-2xl">Pago fallido</h1>
+      </div>
       {!status && <p>Consultando estado...</p>}
       {status && status.error && <p className="text-red-600">{status.error}</p>}
       {status && !status.error && (

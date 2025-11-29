@@ -232,7 +232,7 @@ const AdminTransactionsPage = () => {
                 </TableCell>
                 <TableCell className="space-x-2">
                   <Button variant="secondary" onClick={() => onChangeStatus(t.id)}>Cambiar estado</Button>
-                  <Button onClick={() => onViewDetails(t.id)}>Ver detalles</Button>
+                  <Button onClick={() => onViewDetails(t.id)} className='cursor-pointer'>Ver detalles</Button>
                 </TableCell>
               </TableRow>
             ))}

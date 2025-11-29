@@ -7,6 +7,7 @@ import { debounce } from 'lodash';
 import { useSocket } from '@/providers/SocketProvider';
 import { toast } from 'sonner';
 import { NumberInput } from "./ui/number-input";
+import { Spinner } from "./ui/spinner";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 
 type OperationType = 'buy' | 'sell';
@@ -74,10 +75,10 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
     try {
       const response = await calculateOperation(type, usdAmount, branch || undefined);
-      
+
       if (response.success && response.calculation) {
         setCalculation(response.calculation);
-        
+
         // Verificar inventario
         if (response.calculation.inventory?.status === 'insufficient') {
           setCalculationError('Fondos insuficientes en esta sucursal para el monto solicitado.');
@@ -123,7 +124,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
   // Handler para cambio de input USD
   const handleUsdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
-    
+
     // Detectar y eliminar signos negativos
     if (value.includes('-')) {
       value = value.replace(/-/g, '');
@@ -131,7 +132,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       // Ocultar el warning después de 3 segundos
       setTimeout(() => setNegativeWarning(false), 3000);
     }
-    
+
     setUsdInput(value);
     setError(null);
   };
@@ -247,7 +248,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
       if (res.transaction?.transaction_code) {
         if (onReserved) onReserved(res.transaction.transaction_code);
-        
+
         // Emitir actualización de inventario por socket
         try {
           const branchIdNum = Number(branchId);
@@ -293,18 +294,18 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
   };
 
   return (
-    <div className="bg-white shadow-sm p-4 border border-gray-300 rounded-lg w-full">
+    <div className="bg-white shadow-sm p-4 border border-gray-300 rounded-lg w-full overflow-x-hidden">
       <header className="flex sm:flex-row flex-col justify-between items-start sm:items-center gap-3 mb-4">
         <h3 className="font-semibold text-primary text-lg">Generar Orden</h3>
         <div className="flex sm:flex-row flex-col items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <button
-            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
+            className={`cursor-pointer flex-1 sm:flex-none min-w-[140px] px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
             onClick={() => switchOperationType('buy')}
           >
             Quiero Comprar Dólares
           </button>
           <button
-            className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
+            className={`cursor-pointer flex-1 sm:flex-none min-w-[140px] px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
             onClick={() => switchOperationType('sell')}
           >
             Quiero Vender Dólares
@@ -316,8 +317,8 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         {/* Input principal: siempre USD */}
         <div>
           <label className="block mb-2 font-medium text-primary">
-            {operationType === 'buy' 
-              ? '¿Cuántos Dólares Quieres Comprar?' 
+            {operationType === 'buy'
+              ? '¿Cuántos Dólares Quieres Comprar?'
               : '¿Cuántos Dólares Quieres Vender?'}
           </label>
           <div className="relative">
@@ -343,8 +344,8 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         {isCalculating && (
           <div className="flex items-center gap-2 text-gray-500 text-sm">
             <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
             Calculando...
           </div>
@@ -374,20 +375,20 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
             <div className="space-y-2 pt-3 border-gray-200 border-t">
               {operationType === 'buy' ? (
                 <>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Dólares a comprar:</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto] text-sm">
+                    <span className="text-gray-600 break-words">Dólares a comprar:</span>
                     <span className="font-medium text-gray-800">${calculation.usd_amount.toFixed(2)} USD</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Tasa base:</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
+                    <span className="text-gray-600 break-words">Tasa base:</span>
                     <span className="font-medium text-gray-800">{calculation.base_rate.toFixed(4)} MXN/USD</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
+                    <span className="text-gray-600 break-words">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
                     <span className="font-medium text-gray-800">{calculation.effective_rate.toFixed(4)} MXN/USD</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Comisión sucursal:</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
+                    <span className="text-gray-600 break-words">Comisión sucursal:</span>
                     <span className="font-medium text-red-600">${calculation.commission_mxn.toLocaleString()} MXN</span>
                   </div>
                   <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
@@ -403,20 +404,20 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
                 </>
               ) : (
                 <>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Dólares a entregar:</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto] text-sm">
+                    <span className="text-gray-600 break-words">Dólares a entregar:</span>
                     <span className="font-medium text-gray-800">${calculation.usd_amount.toFixed(2)} USD</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Tasa base:</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
+                    <span className="text-gray-600 break-words">Tasa base:</span>
                     <span className="font-medium text-gray-800">{calculation.base_rate.toFixed(4)} MXN/USD</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
+                    <span className="text-gray-600 break-words">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
                     <span className="font-medium text-gray-800">{calculation.effective_rate.toFixed(4)} MXN/USD</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Comisión sucursal:</span>
+                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
+                    <span className="text-gray-600 break-words">Comisión sucursal:</span>
                     <span className="font-medium text-red-600">${calculation.commission_mxn.toLocaleString()} MXN</span>
                   </div>
                   <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
@@ -434,8 +435,8 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
               {/* Estado del inventario */}
               {calculation.inventory && (
-                <div className={`mt-2 text-xs ${calculation.inventory.status === 'available' ? 'text-green-600' : 'text-orange-600'}`}>
-                  {calculation.inventory.status === 'available' 
+                <div className={`mt-2 text-xs break-words ${calculation.inventory.status === 'available' ? 'text-green-600' : 'text-orange-600'}`}>
+                  {calculation.inventory.status === 'available'
                     ? '✓ Fondos disponibles en esta sucursal'
                     : '⚠ Fondos insuficientes en esta sucursal'}
                 </div>
@@ -448,11 +449,11 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         <div className="flex sm:flex-row flex-col gap-3">
           <div className="flex-1">
             <label htmlFor="branch" className="block mb-2 font-medium text-primary">Sucursal:</label>
-            <select 
-              id="branch" 
-              value={branchId} 
-              onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} 
-              className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" 
+            <select
+              id="branch"
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))}
+              className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer"
               disabled={isLoading}
             >
               {branches.length > 0 ? (
@@ -467,11 +468,11 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
           {operationType === 'buy' && (
             <div className="flex-1">
               <label htmlFor="method" className="block mb-2 font-medium text-primary">Método de Pago:</label>
-              <select 
-                id="method" 
-                value={method} 
-                onChange={(e) => setMethod(e.target.value)} 
-                className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" 
+              <select
+                id="method"
+                value={method}
+                onChange={(e) => setMethod(e.target.value)}
+                className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer"
                 disabled={isLoading}
               >
                 <option value="En sucursal">En sucursal (efectivo)</option>
@@ -496,7 +497,14 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
             onClick={onReserve}
             disabled={isLoading || isCalculating || !calculation || !!calculationError}
           >
-            {isLoading ? 'Procesando...' : 'Revisar Orden'}
+            {isLoading ? (
+              <div className="flex justify-center items-center">
+                <Spinner className="mr-2 w-4 h-4 text-white" />
+                Procesando orden...
+              </div>
+            ) : (
+              'Revisar Orden'
+            )}
           </button>
         </div>
       </div>

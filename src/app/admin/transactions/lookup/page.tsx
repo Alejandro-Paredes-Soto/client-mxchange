@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
 
 export default function TransactionLookupPage() {
   const [code, setCode] = useState('');
@@ -14,8 +16,14 @@ export default function TransactionLookupPage() {
   };
 
   return (
-    <div className="mx-auto p-6 max-w-2xl">
-      <h1 className="mb-4 font-bold text-primary text-2xl">Buscar transacción por código</h1>
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-4">
+        <Button variant="ghost" className="mb-4" onClick={() => router.back()}>
+          <ArrowLeft className="mr-2 w-4 h-4" />
+          Regresar
+        </Button>
+        <h1 className="mb-4 font-bold text-primary text-2xl">Buscar transacción por código</h1>
+      </div>
       <p className="mb-4 text-gray-600">Ingresa el código de la transacción para ver su información detallada.</p>
 
       <div className="flex gap-2">

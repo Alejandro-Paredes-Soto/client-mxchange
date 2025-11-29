@@ -20,7 +20,7 @@ const OperacionPage = () => {
   }, []);
 
   return (
-    <section className="mx-auto max-w-7xl">
+    <section className="md:mx-auto md:max-w-6xl">
       <h1 className="mb-4 font-bold text-primary text-2xl">Operación</h1>
       <OperationForm initialMode={initialMode} rates={rates} onReserved={(txId: string) => router.push(`/operacion/confirm?txId=${txId}`)} />
     </section>

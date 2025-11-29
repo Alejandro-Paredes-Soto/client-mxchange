@@ -1,13 +1,28 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { listTransactionsMock, getUserTransactions, Transaction, BackendTransaction } from '../../services/api';
 import { humanizeStatus } from '@/lib/statuses';
 import Cookies from 'js-cookie';
 import { TransactionCard } from '@/components/TransactionCard';
+import { ArrowLeft } from 'lucide-react';
 // shadcn components: si no están, se usan elementos nativos con clases similares
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { History } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
+
 
 const mapBackend = (b: BackendTransaction): Transaction => {
   const id = b.transaction_code ? String(b.transaction_code) : b.id ? String(b.id) : '';
@@ -36,6 +51,7 @@ const mapBackend = (b: BackendTransaction): Transaction => {
 // usar getStatusColor importado arriba
 
 const MisMovimientos = () => {
+  const router = useRouter();
   const [items, setItems] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -118,15 +134,33 @@ const MisMovimientos = () => {
   }, [items, qFolio, statusFilter, dateFrom, dateTo]);
 
   if (loading) return (
-    <div className="mx-auto p-6 max-w-7xl">
+    <div className="mx-auto max-w-6xl">
       <div className="mb-8">
+        <Button variant="ghost" onClick={() => router.back()} className="mb-4 cursor-pointer">
+          <ArrowLeft className="mr-2 w-4 h-4" />
+          Regresar
+        </Button>
         <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
         <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
       </div>
-      <div className="bg-card p-8 border rounded-lg text-center">
-        <div className="space-y-4 animate-pulse">
-          <div className="bg-muted mx-auto rounded w-1/4 h-4"></div>
-          <div className="bg-muted mx-auto rounded w-1/2 h-4"></div>
+      <div className="bg-card p-8 border rounded-lg">
+        <div className="gap-4 grid">
+          <div className="mx-auto w-full max-w-3xl">
+            <Skeleton className="mx-auto w-1/4 h-6" />
+            <Skeleton className="mx-auto mt-2 w-1/2 h-4" />
+          </div>
+
+          <div className="space-y-4 mt-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex justify-between items-center gap-4">
+                <div className="flex-1">
+                  <Skeleton className="w-3/4 h-4" />
+                  <Skeleton className="mt-2 w-1/2 h-3" />
+                </div>
+                <Skeleton className="w-20 h-8" />
+              </div>
+            ))}
+          </div>
         </div>
         <p className="mt-4 text-muted-foreground">Cargando transacciones...</p>
       </div>
@@ -134,8 +168,12 @@ const MisMovimientos = () => {
   );
 
   if (error) return (
-    <div className="mx-auto p-6 max-w-7xl">
+    <div className="mx-auto max-w-6xl">
       <div className="mb-8">
+        <Button variant="ghost" onClick={() => router.back()} className="mb-4 cursor-pointer">
+          <ArrowLeft className="mr-2 w-4 h-4" />
+          Regresar
+        </Button>
         <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
         <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
       </div>
@@ -146,26 +184,50 @@ const MisMovimientos = () => {
   );
 
   if (!items || items.length === 0) return (
-    <div className="mx-auto p-6 max-w-7xl">
-      <div className="mb-8">
-        <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
-        <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
-      </div>
-      <div className="bg-card p-12 border rounded-lg text-center">
-        <div className="mb-4 text-muted-foreground text-5xl">📭</div>
-        <h3 className="mb-2 font-semibold text-xl">No hay transacciones</h3>
-        <p className="text-muted-foreground">Aún no has realizado ninguna transacción.</p>
-      </div>
-    </div>
+    <Empty className="justify-start"   >
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <History className="" />
+
+        </EmptyMedia>
+        <EmptyTitle>No tienes transacciones</EmptyTitle>
+        <EmptyDescription>
+          Parece que aún no has realizado ninguna transacción. ¡Comienza ahora!
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <div className="flex gap-2">
+          <Button
+            className='cursor-pointer'
+            onClick={() => router.push('/operacion?mode=buy')}
+          >Comprar Dólares</Button>
+          <Button variant="outline"
+            className='cursor-pointer'
+            onClick={() => router.push('/operacion?mode=sell')}>Vender Dólares</Button>
+        </div>
+      </EmptyContent>
+      <Button
+        variant="link"
+        asChild
+        className="text-muted-foreground"
+        size="sm"
+      >
+        <span onClick={() => router.back()}>Regresar</span>
+      </Button>
+    </Empty>
   );
 
   return (
-    <section className="mx-auto p-6 max-w-7xl">
+    <section className="mx-auto max-w-6xl">
       <div className="mb-8">
+        <Button variant="ghost" onClick={() => router.back()} className="mb-4 cursor-pointer">
+          <ArrowLeft className="mr-2 w-4 h-4" />
+          Regresar
+        </Button>
         <h1 className="mb-2 font-bold text-primary text-4xl">Mis Movimientos</h1>
         <p className="text-muted-foreground text-base">Historial completo de tus transacciones</p>
       </div>
-      
+
       {/* Filters */}
       <div className="bg-card mb-8 p-6 border rounded-lg">
         <h2 className="mb-4 font-semibold text-primary text-lg">Filtros de búsqueda</h2>

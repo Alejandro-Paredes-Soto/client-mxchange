@@ -129,7 +129,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 px-4 py-2">
             <div className="text-center">
               <h1 className="font-bold text-primary text-xl">
-                M<span className="text-secondary text-2xl">X</span>ange
+                M<span className="text-secondary text-2xl">X</span>change
               </h1>
             </div>
           </div>

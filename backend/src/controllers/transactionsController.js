@@ -1,10 +1,14 @@
 const pool = require('../config/db');
 const emailService = require('../services/emailService');
-const { roundMXN, roundUSD, calculateEffectiveRate } = require('../utils/precisionHelper');
+const { roundMXN, roundUSD, calculateEffectiveRate, calculateAmountsWithCommission, isValidNumber } = require('../utils/precisionHelper');
+const crypto = require('crypto');
 
 // Genera un código único corto para la transacción
+// Usa timestamp + random para evitar colisiones en requests simultáneos
 function generateTransactionCode() {
-  return 'MX' + Date.now().toString(36).slice(-6).toUpperCase();
+  const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
+  const random = crypto.randomBytes(2).toString('hex').toUpperCase();
+  return 'MX' + timestamp + random;
 }
 
 const createTransaction = async (req, res, next) => {
@@ -38,8 +42,8 @@ const createTransaction = async (req, res, next) => {
     }
 
     const usdAmt = Number(usd_amount);
-    if (isNaN(usdAmt) || usdAmt <= 0) {
-      return res.status(400).json({ message: 'usd_amount debe ser un número positivo.' });
+    if (isNaN(usdAmt) || usdAmt <= 0 || !isFinite(usdAmt)) {
+      return res.status(400).json({ message: 'usd_amount debe ser un número positivo válido.' });
     }
 
     // Límites de operación
@@ -77,35 +81,29 @@ const createTransaction = async (req, res, next) => {
     // 5. Calcular tasa efectiva con comisión
     const effectiveRate = calculateEffectiveRate(baseRate, commissionPercent, type);
 
-    // 6. Calcular montos (todo en el servidor)
-    let mxnAmount, commissionMXN;
+    // 6. Calcular montos usando función unificada (evita errores de redondeo)
+    const { mxnAmount, commission: commissionMXN } = calculateAmountsWithCommission(
+      usdAmt, baseRate, effectiveRate, type
+    );
+    
     let serverAmountFrom, serverAmountTo;
     let currencyFrom, currencyTo;
 
     if (type === 'buy') {
       // Cliente COMPRA USD: paga MXN, recibe USD
-      mxnAmount = roundMXN(usdAmt * effectiveRate);
-      const mxnWithoutCommission = roundMXN(usdAmt * baseRate);
-      commissionMXN = mxnAmount - mxnWithoutCommission;
-      
-      serverAmountFrom = mxnAmount;    // MXN que paga el cliente
+      serverAmountFrom = mxnAmount;      // MXN que paga el cliente
       serverAmountTo = roundUSD(usdAmt); // USD que recibe el cliente
       currencyFrom = 'MXN';
       currencyTo = 'USD';
     } else {
       // Cliente VENDE USD: entrega USD, recibe MXN
-      mxnAmount = roundMXN(usdAmt * effectiveRate);
-      const mxnWithoutCommission = roundMXN(usdAmt * baseRate);
-      commissionMXN = mxnWithoutCommission - mxnAmount;
-      
       serverAmountFrom = roundUSD(usdAmt); // USD que entrega el cliente
       serverAmountTo = mxnAmount;          // MXN que recibe el cliente
       currencyFrom = 'USD';
       currencyTo = 'MXN';
     }
 
-    // Asegurar que comisión no sea negativa
-    if (commissionMXN < 0) commissionMXN = 0;
+    // La comisión ya viene validada >= 0 desde calculateAmountsWithCommission
 
     // Validar montos calculados
     if (serverAmountFrom <= 0 || serverAmountTo <= 0) {
@@ -120,33 +118,33 @@ const createTransaction = async (req, res, next) => {
     const currencyToReceive = currencyFrom; // Lo que recibe la sucursal
     const amountToVerify = serverAmountTo;
 
-    // 8. Bloquear fila de inventario y verificar fondos
-    const [inventoryRows] = await connection.query(
-      'SELECT amount FROM inventory WHERE branch_id = ? AND currency = ? FOR UPDATE',
+    // 8. BLOQUEO ATÓMICO: Usar una sola query con JOIN para bloquear inventory Y calcular reservas
+    // Esto previene race conditions al obtener ambos valores en una operación atómica
+    const [inventoryWithReservations] = await connection.query(
+      `SELECT 
+         i.amount as total_inventory,
+         COALESCE((
+           SELECT SUM(ir.amount_reserved) 
+           FROM inventory_reservations ir 
+           WHERE ir.branch_id = i.branch_id 
+             AND ir.currency = i.currency 
+             AND ir.status = 'reserved'
+         ), 0) as total_reserved
+       FROM inventory i
+       WHERE i.branch_id = ? AND i.currency = ?
+       FOR UPDATE`,
       [branchIdNum, currencyToVerify]
     );
 
-    const totalInventoryAmount = inventoryRows[0]?.amount;
-
-    if (!totalInventoryAmount) {
+    if (!inventoryWithReservations || !inventoryWithReservations.length) {
       await connection.rollback();
       return res.status(409).json({
         message: `Lo sentimos. La sucursal seleccionada no tiene inventario configurado para ${currencyToVerify}.`
       });
     }
 
-    // 4.b Calcular cuánto está actualmente reservado (pero no comprometido aún)
-    // Esto evita sobreventa: si alguien ya reservó dinero, no podemos reservarlo de nuevo
-    // FOR UPDATE bloquea las filas de reservaciones para evitar race conditions
-    const [reservedRows] = await connection.query(
-      `SELECT COALESCE(SUM(amount_reserved), 0) as total_reserved 
-       FROM inventory_reservations 
-       WHERE branch_id = ? AND currency = ? AND status = 'reserved'
-       FOR UPDATE`,
-      [branchIdNum, currencyToVerify]
-    );
-
-    const totalReservedAmount = reservedRows && reservedRows[0] ? Number(reservedRows[0].total_reserved) : 0;
+    const totalInventoryAmount = Number(inventoryWithReservations[0].total_inventory);
+    const totalReservedAmount = Number(inventoryWithReservations[0].total_reserved);
     const actuallyAvailableAmount = totalInventoryAmount - totalReservedAmount;
 
     console.log(`[INVENTORY CHECK] Sucursal ${branchIdNum}, ${currencyToVerify}:`, {
@@ -207,21 +205,17 @@ const createTransaction = async (req, res, next) => {
     );
     const newTransactionId = result.insertId;
 
-    // 6.b Insertar reserva de inventario (registro separado para poder liberar/confirmar)
-    try {
-      // Calcular expiración de la reserva (misma que la transacción)
-      const reservationExpiresAt = expiresAt;
-      
-      // amountToVerify es lo que la sucursal entrega (se descuenta del inventario)
-      await connection.query(
-        'INSERT INTO inventory_reservations (transaction_id, branch_id, currency, amount_reserved, status, expires_at) VALUES (?, ?, ?, ?, ?, ?) ',
-        // Use serverAmountTo: la cantidad que la sucursal apartó para entregar
-        [newTransactionId, branchIdNum, currencyToVerify, serverAmountTo, 'reserved', reservationExpiresAt]
-      );
-    } catch (resErr) {
-      console.warn('No se pudo crear inventory_reservation:', resErr && resErr.message ? resErr.message : resErr);
-      // No revertimos la operación por ahora; la reserva es útil pero no crítica en caso de fallo menor
-    }
+    // 6.b Insertar reserva de inventario (OBLIGATORIO - sin reserva no hay transacción)
+    // Calcular expiración de la reserva (misma que la transacción)
+    const reservationExpiresAt = expiresAt;
+    
+    // amountToVerify es lo que la sucursal entrega (se descuenta del inventario)
+    // CRÍTICO: Si esto falla, la transacción DEBE revertirse para evitar sobreventa
+    await connection.query(
+      'INSERT INTO inventory_reservations (transaction_id, branch_id, currency, amount_reserved, status, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+      // Use serverAmountTo: la cantidad que la sucursal apartó para entregar
+      [newTransactionId, branchIdNum, currencyToVerify, serverAmountTo, 'reserved', reservationExpiresAt]
+    );
 
     // 7. Commit the database transaction
     await connection.commit();
@@ -375,6 +369,45 @@ const createTransaction = async (req, res, next) => {
         console.error('Error al hacer rollback:', rollbackErr);
       }
     }
+    
+    // Manejar errores específicos de MySQL
+    if (error.code === 'ER_DUP_ENTRY') {
+      // Código de transacción duplicado - muy raro pero posible
+      if (error.message && error.message.includes('transaction_code')) {
+        console.error('Colisión de código de transacción detectada, reintentando...', error.message);
+        return res.status(409).json({ 
+          message: 'Error temporal al generar la operación. Por favor, intenta de nuevo.',
+          code: 'TRANSACTION_CODE_COLLISION'
+        });
+      }
+      // Reserva duplicada
+      if (error.message && error.message.includes('inventory_reservations')) {
+        console.error('Intento de reserva duplicada:', error.message);
+        return res.status(409).json({ 
+          message: 'Esta operación ya tiene una reserva activa.',
+          code: 'DUPLICATE_RESERVATION'
+        });
+      }
+    }
+    
+    // Error de deadlock - el cliente debe reintentar
+    if (error.code === 'ER_LOCK_DEADLOCK') {
+      console.error('Deadlock detectado en createTransaction:', error.message);
+      return res.status(503).json({ 
+        message: 'El sistema está procesando muchas solicitudes. Por favor, intenta de nuevo en unos segundos.',
+        code: 'DEADLOCK_RETRY'
+      });
+    }
+    
+    // Lock wait timeout
+    if (error.code === 'ER_LOCK_WAIT_TIMEOUT') {
+      console.error('Lock timeout en createTransaction:', error.message);
+      return res.status(503).json({ 
+        message: 'El sistema está ocupado. Por favor, intenta de nuevo.',
+        code: 'LOCK_TIMEOUT'
+      });
+    }
+    
     next(error); // Pass to global error handler
   } finally {
     if (connection && connection.connection && connection.connection._fatalError === undefined) {

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -49,6 +51,7 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
   showQR = false,
   onDownloadQR,
 }) => {
+  const [downloading, setDownloading] = useState(false);
   const isBuying = type === 'buy';
   const fromCurrency = isBuying ? 'MXN' : 'USD';
   const toCurrency = isBuying ? 'USD' : 'MXN';
@@ -194,12 +197,31 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
                   </p>
                   {onDownloadQR && (
                     <Button
-                      onClick={() => onDownloadQR(id)}
-                      variant="outline"
+                      onClick={async () => {
+                        if (!onDownloadQR) return;
+                        try {
+                          setDownloading(true);
+                          await Promise.resolve(onDownloadQR(id));
+                        } catch (error) {
+                          console.error('Error descargando QR desde TransactionCard:', error);
+                          toast.error('Error al descargar el QR');
+                        } finally {
+                          setDownloading(false);
+                        }
+                      }}
+                      disabled={downloading}
+                      variant="default"
                       size="sm"
-                      className="mt-2"
+                      className="mt-2 cursor-pointer"
                     >
-                      Descargar QR
+                      {downloading ? (
+                        <>
+                          <Spinner className="mr-2 w-4 h-4" />
+                          Descargando...
+                        </>
+                      ) : (
+                        'Descargar QR'
+                      )}
                     </Button>
                   )}
                 </div>
@@ -211,7 +233,7 @@ export const TransactionCard: React.FC<TransactionCardProps> = ({
         {/* Botón Ver más */}
         <div className="pt-2">
           <Link href={`/operacion/confirm?txId=${id}`} className="w-full">
-            <Button variant="default" className="w-full">
+            <Button variant="default" className="w-full cursor-pointer">
               Ver detalles completos
             </Button>
           </Link>

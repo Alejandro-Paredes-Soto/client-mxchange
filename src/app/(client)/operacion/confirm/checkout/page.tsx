@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import Cookies from 'js-cookie';
 import StripeCheckout from '@/components/StripeCheckout';
 import { BackendTransaction, getUserTransactions } from '@/app/services/api';
@@ -48,14 +48,14 @@ export default function CheckoutPage() {
   const amountToPay = Number(tx.amount_from || 0); // pago en MXN
 
   return (
-    <section className="mx-auto p-5 max-w-xl">
+    <section className="mx-auto max-w-xl">
       <div className="mb-6">
         <Button
           variant="ghost"
           className="mb-4"
           onClick={() => router.push(`/operacion/confirm?txId=${encodeURIComponent(txId || '')}`)}
         >
-          <ArrowLeft className="mr-2 w-4 h-4" />
+          <ArrowLeft className="mr-2 w-4 h-4 cursor-pointer" />
           Volver a detalles de la transacción
         </Button>
         <h1 className="mt-2 font-bold text-primary text-2xl">Pagar con tarjeta</h1>
@@ -71,7 +71,7 @@ export default function CheckoutPage() {
           <div className="flex-1">
             <h3 className="font-semibold text-blue-900 text-sm">Importante</h3>
             <p className="mt-1 text-blue-800 text-sm">
-              Solo aceptamos <strong>tarjetas de débito</strong> o <strong>prepagadas</strong>. 
+              Solo aceptamos <strong>tarjetas de débito</strong> o <strong>prepagadas</strong>.
               No se permiten tarjetas de crédito por políticas de la plataforma.
             </p>
           </div>
@@ -101,9 +101,19 @@ export default function CheckoutPage() {
         />
       </div>
 
-      <p className="mt-4 text-gray-500 text-xs">
-        Al confirmar el pago, tu transacción será procesada inmediatamente y podrás ver el estado actualizado.
-      </p>
+      {/* Nota de acción: El procesamiento ocurre en el backend y la página de detalles mostrará los cambios */}
+        {/* compra segura a través de Stripe - diseño mejorado */}
+        <section className="mt-6 text-center" aria-label="Pago seguro">
+          <p className="text-gray-500 text-xs">Al confirmar el pago, tu transacción será procesada inmediatamente y podrás ver el estado actualizado.</p>
+
+          <div className="inline-flex justify-center items-center gap-3 bg-muted/10 mt-4 px-3 py-2 border border-muted/20 rounded-full">
+            <ShieldCheck className="w-5 h-5 text-green-600" aria-hidden="true" />
+            <div className="text-left">
+              <div className="font-medium text-sm">Compra segura</div>
+              <div className="text-muted-foreground text-xs">con tecnología de <span className="font-semibold text-primary">Stripe</span></div>
+            </div>
+          </div>
+        </section>
     </section>
   );
-}
+} 

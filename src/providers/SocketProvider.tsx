@@ -117,9 +117,15 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     const s = getSocket();
-  s.on('connect', () => console.log('Socket connected:', s.id));
-  s.on('disconnect', () => console.log('Socket disconnected'));
-  s.on('connect_error', (err: unknown) => console.error('Socket connect_error:', err));
+    
+    // Definir handlers como funciones nombradas para poder removerlas después
+    const onConnect = () => console.log('Socket connected:', s.id);
+    const onDisconnect = () => console.log('Socket disconnected');
+    const onConnectError = (err: unknown) => console.error('Socket connect_error:', err);
+
+    s.on('connect', onConnect);
+    s.on('disconnect', onDisconnect);
+    s.on('connect_error', onConnectError);
 
     // Registrar sala con base en la sesión (admin, sucursal o usuario)
     try {
@@ -215,12 +221,37 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     s.on('inventory.updated', onInventoryUpdated);
 
+    // CLEANUP: Remover TODOS los listeners para evitar memory leaks
     return () => {
-      // cerrar socket al desmontar
-      try { s.off('notification', onNotification); } catch { }
+      s.off('connect', onConnect);
+      s.off('disconnect', onDisconnect);
+      s.off('connect_error', onConnectError);
+      s.off('notification', onNotification);
+      s.off('notifications', onNotificationsArray);
+      s.off('inventory.updated', onInventoryUpdated);
       closeSocket();
     };
   }, [getSessionInfo]);
+
+  // Limpieza periódica del mapa de deduplicación para evitar memory leaks
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      let cleaned = 0;
+      recentKeysRef.current.forEach((timestamp, key) => {
+        // Eliminar entradas más antiguas que el doble del tiempo de deduplicación
+        if (now - timestamp > DEDUP_MS * 2) {
+          recentKeysRef.current.delete(key);
+          cleaned++;
+        }
+      });
+      if (cleaned > 0) {
+        console.log(`[SocketProvider] Limpiados ${cleaned} keys de deduplicación expirados`);
+      }
+    }, 60000); // Cada minuto
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
 
   // Cargar desde servidor al montar/cambiar sesión
   useEffect(() => {

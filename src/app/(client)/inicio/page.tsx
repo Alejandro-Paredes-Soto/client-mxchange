@@ -30,6 +30,7 @@ const Inicio = () => {
   const [rates, setRates] = useState<Rates | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [displayName, setDisplayName] = useState<string>('');
+  const [tokenReady, setTokenReady] = useState<boolean>(false);
   const { isTokenExpired, onLogout, onRouterLink } = useUtils();
 
   // token/session handling (kept as existing logic)
@@ -68,10 +69,12 @@ const Inicio = () => {
           // IMPORTANTE: También guardar el token en cookies para que OperationForm y otros componentes lo puedan usar
           Cookies.set('token', token, { path: '/', expires: 0.33 }); // expires en 0.33 días = 8 horas (igual que el JWT)
           console.log('✅ [inicio/page] Token guardado en localStorage y cookies');
+          setTokenReady(true);
         } else {
           localStorage.removeItem("token");
           Cookies.remove('token', { path: '/' });
           console.log('❌ [inicio/page] Token inválido, removido de localStorage y cookies');
+          setTokenReady(false);
         }
       }
     } else if (authGoogle == "false") {
@@ -80,8 +83,16 @@ const Inicio = () => {
         if (validToken) {
           localStorage.removeItem("token");
           Cookies.remove('token', { path: '/' });
+          setTokenReady(false);
+        } else {
+          setTokenReady(true);
         }
       }
+    }
+    // Si ya hay token en cookies (login tradicional), marcar como ready
+    const existingToken = Cookies.get('token');
+    if (existingToken && !tokenReady) {
+      setTokenReady(true);
     }
   }, [session, status, isTokenExpired]);
 
@@ -93,7 +104,7 @@ const Inicio = () => {
     } catch (e) {
       console.error('Error reading name from localStorage', e);
     }
-  }, []);
+  }, [tokenReady, session]); // Re-ejecutar cuando el token esté listo o cambie la sesión
 
   // rates polling
   useEffect(() => {
@@ -147,10 +158,10 @@ const Inicio = () => {
       mounted = false;
       clearInterval(id);
     };
-  }, []);
+  }, [tokenReady]); // Re-ejecutar cuando el token esté listo
 
   return (
-    <section className="mx-auto p-6">
+    <section className="mx-auto mt-5 max-w-6xl">
       <header className="mb-8">
         <h1 className="mb-2 font-bold text-primary text-4xl">
           Bienvenido{displayName ? `, ${displayName}` : ''}
@@ -161,7 +172,7 @@ const Inicio = () => {
       </header>
 
       <main className="gap-6 grid grid-cols-1 md:grid-cols-[1fr_320px]">
-        <div>
+        <div className="min-w-0">
           <RateCard rates={rates} />
 
           <section className="my-12">
@@ -204,7 +215,7 @@ const Inicio = () => {
           </section>
         </div>
 
-        <aside>
+        <aside className="min-w-0">
           <div className="top-6 sticky bg-card p-5 border rounded-lg">
             <h3 className="mb-4 font-semibold text-xl">Accesos rápidos</h3>
             <div className="flex flex-col gap-3">

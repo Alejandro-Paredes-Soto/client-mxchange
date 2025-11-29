@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { ArrowRight, Building2, Calendar, CreditCard, Hash, TrendingUp, AlertCircle } from 'lucide-react';
+import { ArrowRight, Building2, Calendar, CreditCard, Hash, TrendingUp, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { putTransactionStatus } from '../../../services/api';
 import { getSocket } from '@/lib/socket';
@@ -139,7 +139,7 @@ export default function AdminTransactionDetail() {
   };
 
   if (!txId) return (
-    <div className="mx-auto p-6 max-w-5xl">
+    <div className="mx-auto max-w-5xl">
       <Card className="p-8 text-center">
         <p className="text-muted-foreground">Falta el código de transacción.</p>
       </Card>
@@ -147,7 +147,7 @@ export default function AdminTransactionDetail() {
   );
   
   if (loading) return (
-    <div className="mx-auto p-6 max-w-5xl">
+    <div className="mx-auto max-w-5xl">
       <Card className="p-8 text-center">
         <div className="space-y-4 animate-pulse">
           <div className="bg-muted mx-auto rounded w-1/4 h-4"></div>
@@ -159,7 +159,7 @@ export default function AdminTransactionDetail() {
   );
   
   if (error) return (
-    <div className="mx-auto p-6 max-w-5xl">
+    <div className="mx-auto max-w-5xl">
       <Card className="bg-destructive/10 p-8 border-destructive/20">
         <p className="font-medium text-destructive">Error: {error}</p>
       </Card>
@@ -168,7 +168,7 @@ export default function AdminTransactionDetail() {
   
   if (!tx) {
     return (
-      <section className="mx-auto p-6 max-w-5xl">
+      <section className="mx-auto max-w-5xl">
         <div className="mb-8">
           <Button variant="ghost" onClick={() => router.back()} className="mb-6 cursor-pointer">
             <svg className="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -209,9 +209,13 @@ export default function AdminTransactionDetail() {
   const showPaymentCompleted = isPaidWithCard && (isPaid || rawStatus.toLowerCase() === 'ready_for_pickup' || rawStatus.toLowerCase() === 'completed');
 
   return (
-    <section className="mx-auto p-6">
+    <section className="mx-auto">
       {/* Header compacto */}
       <div className="mb-6">
+        <Button variant="ghost" onClick={() => router.back()} className="mb-3">
+          <ArrowLeft className="mr-2 w-4 h-4" />
+          Regresar
+        </Button>
         <div className="flex sm:flex-row flex-col justify-between items-start gap-3 mb-3">
           <div className="flex-1">
             <h1 className="mb-2 font-bold text-primary text-3xl tracking-tight">Detalle de Transacción</h1>
@@ -465,7 +469,7 @@ export default function AdminTransactionDetail() {
                         variant={a.variant || 'default'} 
                         disabled={updating} 
                         onClick={() => performAction(a.status)}
-                        className="w-full"
+                        className="w-full text-white cursor-pointer"
                       >
                         {updating ? 'Procesando...' : a.label}
                       </Button>

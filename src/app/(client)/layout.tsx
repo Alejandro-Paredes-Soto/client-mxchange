@@ -72,7 +72,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
               onClick={() => router.push('/inicio')}
             >
               <h1 className="font-bold text-primary text-xl">
-                M<span className="text-secondary text-2xl">X</span>ange
+                M<span className="text-secondary text-2xl">X</span>change
               </h1>
             </div>
           </div>

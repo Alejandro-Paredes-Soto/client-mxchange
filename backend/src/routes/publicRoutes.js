@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
+const { roundMXN, roundUSD, calculateEffectiveRate, calculateAmountsWithCommission } = require('../utils/precisionHelper');
 
 router.get('/exchange-rate', async (req, res) => {
   try {
@@ -46,7 +47,6 @@ router.get('/config/commission', async (req, res) => {
 // Este endpoint recibe solo: type, usd_amount, branch_id
 // y devuelve TODOS los cálculos listos para mostrar.
 // ============================================================================
-const { roundMXN, roundUSD, calculateEffectiveRate } = require('../utils/precisionHelper');
 
 router.post('/calculate-operation', async (req, res) => {
   try {
@@ -58,8 +58,8 @@ router.post('/calculate-operation', async (req, res) => {
     }
 
     const usdAmt = Number(usd_amount);
-    if (isNaN(usdAmt) || usdAmt <= 0) {
-      return res.status(400).json({ message: 'Monto USD inválido. Debe ser un número positivo.' });
+    if (isNaN(usdAmt) || usdAmt <= 0 || !isFinite(usdAmt)) {
+      return res.status(400).json({ message: 'Monto USD inválido. Debe ser un número positivo válido.' });
     }
 
     // Límites de operación
@@ -94,27 +94,10 @@ router.post('/calculate-operation', async (req, res) => {
     // 3. Calcular tasa efectiva con comisión
     const effectiveRate = calculateEffectiveRate(baseRate, commissionPercent, type);
 
-    // 4. Calcular montos
-    let mxnAmount, commissionMXN;
-
-    if (type === 'buy') {
-      // Cliente COMPRA USD: paga MXN, recibe USD
-      // MXN = USD * tasa_efectiva (redondeado sin decimales)
-      mxnAmount = roundMXN(usdAmt * effectiveRate);
-      // Comisión = lo que paga - lo que pagaría sin comisión
-      const mxnWithoutCommission = roundMXN(usdAmt * baseRate);
-      commissionMXN = mxnAmount - mxnWithoutCommission;
-    } else {
-      // Cliente VENDE USD: entrega USD, recibe MXN
-      // MXN = USD * tasa_efectiva (redondeado sin decimales)
-      mxnAmount = roundMXN(usdAmt * effectiveRate);
-      // Comisión = lo que recibiría sin comisión - lo que recibe
-      const mxnWithoutCommission = roundMXN(usdAmt * baseRate);
-      commissionMXN = mxnWithoutCommission - mxnAmount;
-    }
-
-    // Asegurar que comisión no sea negativa
-    if (commissionMXN < 0) commissionMXN = 0;
+    // 4. Calcular montos usando función unificada (evita errores de redondeo)
+    const { mxnAmount, commission: commissionMXN } = calculateAmountsWithCommission(
+      usdAmt, baseRate, effectiveRate, type
+    );
 
     // 5. Verificar disponibilidad de inventario (si se proporciona branch_id)
     let inventoryAvailable = null;

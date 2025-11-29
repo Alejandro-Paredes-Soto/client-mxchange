@@ -5,7 +5,7 @@ import { listTransactionsMock, Transaction, getUserTransactions, BackendTransact
 import { humanizeStatus, getStatusColor } from '@/lib/statuses';
 
 import Cookies from 'js-cookie';
-import { CreditCard, Banknote, AlertCircle } from 'lucide-react';
+import { CreditCard, Banknote, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 import Link from 'next/link';
@@ -13,6 +13,7 @@ import Image from 'next/image';
 import { getSocket } from '@/lib/socket';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 // types for TSX loosened (file is .tsx but project may not strictly type everything)
 
@@ -79,6 +80,7 @@ const ConfirmPage = () => {
   const params = useSearchParams();
   const txId = params.get('txId');
   const [tx, setTx] = useState<Transaction | null>(null);
+  const [downloading, setDownloading] = useState(false);
   // rates and amountToNow removed (secciones informativas comentadas)
 
   useEffect(() => {
@@ -193,7 +195,7 @@ const ConfirmPage = () => {
 
   if (!tx) {
     return (
-      <section className="mx-auto p-6 max-w-6xl">
+      <section className="mx-auto max-w-6xl">
         <div className="mb-8">
           <Button variant="ghost" onClick={() => router.back()} className="mb-6 cursor-pointer">
             <svg className="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -217,6 +219,7 @@ const ConfirmPage = () => {
   const downloadQR = async () => {
     if (!qrUrl) return;
     try {
+      setDownloading(true);
       const response = await fetch(qrUrl);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -227,6 +230,9 @@ const ConfirmPage = () => {
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error downloading QR:', error);
+      toast.error('Error al descargar el QR');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -260,19 +266,45 @@ const ConfirmPage = () => {
     }
   };
 
+  const getHeadingAndSubtitle = (status?: string) => {
+    const s = (status || '').toString().toLowerCase();
+
+    if (s.includes('reservado') || s.includes('pendiente')) {
+      return { title: '¡Reserva Confirmada!', subtitle: 'Tu operación ha sido registrada exitosamente. Estamos procesando tu operación y te notificaremos cuando esté lista para ser recogida.' };
+    }
+    if (s.includes('cancelado') || s.includes('cancel')) {
+      return { title: 'Reserva cancelada', subtitle: 'La transacción fue cancelada y ya no está activa.' };
+    }
+    if (s.includes('expirado') || s.includes('expired')) {
+      return { title: 'Reserva expirada', subtitle: 'La reserva venció y ya no es válida.' };
+    }
+    if (s.includes('pagado') || s.includes('paid')) {
+      return { title: 'Pago recibido', subtitle: 'Tu pago ha sido confirmado exitosamente. Estamos procesando tu operación y te notificaremos cuando esté lista para ser recogida.' };
+    }
+    if (s.includes('listo para recoger') || s.includes('ready_for_pickup') || s.includes('listo para recibir') || s.includes('ready_to_receive')) {
+      // Usamos el texto tal cual para que se refleje la diferencia de "recibir" vs "recoger"
+      const title = s.includes('recibir') ? 'Listo para recibir' : 'Listo para recoger';
+      return { title, subtitle: 'Tu operación está lista para ser procesada en sucursal.' };
+    }
+    if (s.includes('completado') || s.includes('completed')) {
+      return { title: 'Operación completada', subtitle: 'La operación se completó con éxito.' };
+    }
+
+    // Fallback
+    return { title: '¡Reserva Confirmada!', subtitle: 'Tu operación ha sido registrada exitosamente' };
+  };
+
+  const headings = getHeadingAndSubtitle(tx.status);
+
   return (
-    <section className="mx-auto p-6 max-w-6xl">
+    <section className="mx-auto max-w-6xl">
       <div className="mb-8">
-        <Link href="/inicio">
-          <Button variant="ghost" className="mb-6 cursor-pointer">
-            <svg className="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Volver al inicio
-          </Button>
-        </Link>
-        <h1 className="mb-2 font-bold text-primary text-4xl">¡Reserva Confirmada!</h1>
-        <p className="text-muted-foreground text-base">Tu operación ha sido registrada exitosamente</p>
+        <Button variant="ghost" className="mb-6 cursor-pointer" onClick={() => router.back()}>
+          <ArrowLeft className="mr-2 w-4 h-4" />
+          Regresar
+        </Button>
+        <h1 className="mb-2 font-bold text-primary text-4xl">{headings.title}</h1>
+        <p className="text-muted-foreground text-base">{headings.subtitle}</p>
       </div>
 
       <div className="gap-8 grid grid-cols-1 lg:grid-cols-3">
@@ -411,11 +443,19 @@ const ConfirmPage = () => {
 
                 <Button
                   onClick={downloadQR}
-                  variant="outline"
+                  disabled={downloading}
+                  variant="default"
                   size="lg"
-                  className="mt-6 w-full"
+                  className="mt-6 w-full cursor-pointer"
                 >
-                  Descargar QR
+                  {downloading ? (
+                    <>
+                      <Spinner className="mr-2 w-4 h-4" />
+                      Descargando...
+                    </>
+                  ) : (
+                    'Descargar QR'
+                  )}
                 </Button>
               </div>
 
