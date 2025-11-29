@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const emailService = require('../services/emailService');
+const { roundMXN, roundUSD, calculateEffectiveRate } = require('../utils/precisionHelper');
 
 // Genera un código único corto para la transacción
 function generateTransactionCode() {
@@ -7,118 +8,122 @@ function generateTransactionCode() {
 }
 
 const createTransaction = async (req, res, next) => {
-  const connection = await pool.getConnection(); // Get connection for transaction
+  const connection = await pool.getConnection();
   try {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized. User not found in token.' });
     }
 
-    const { branch_id, type, amount_from, currency_from, amount_to, currency_to, exchange_rate, method } = req.body;
+    // ========================================================================
+    // NUEVO PAYLOAD SIMPLIFICADO (Backend Authoritative)
+    // El frontend solo envía: branch_id, type, usd_amount, method
+    // El backend calcula TODO lo demás usando settings de la DB
+    // ========================================================================
+    const { branch_id, type, usd_amount, method } = req.body;
 
-    // 1. Validate input
-    const requiredFields = { branch_id, type, amount_from, currency_from, amount_to, currency_to, exchange_rate };
-    const missing = Object.entries(requiredFields).filter(([_, v]) => v === undefined || v === null || v === '').map(([k]) => k);
-    if (missing.length > 0) {
-      return res.status(400).json({ message: 'Faltan campos obligatorios para la transacción.', missing });
+    // 1. Validar inputs mínimos
+    if (!branch_id) {
+      return res.status(400).json({ message: 'branch_id es requerido.' });
     }
 
-    const amtFrom = Number(amount_from);
-    const amtTo = Number(amount_to);
-    if (isNaN(amtFrom) || isNaN(amtTo) || amtFrom <= 0 || amtTo <= 0) {
-      return res.status(400).json({ message: 'Los montos de la transacción deben ser números positivos.' });
+    // Validar que branch_id sea un número entero positivo (previene SQL injection)
+    const branchIdNum = parseInt(branch_id, 10);
+    if (isNaN(branchIdNum) || branchIdNum <= 0 || branchIdNum.toString() !== branch_id.toString()) {
+      return res.status(400).json({ message: 'branch_id debe ser un número entero válido.' });
     }
 
-    // 2. Start database transaction
+    if (!type || (type !== 'buy' && type !== 'sell')) {
+      return res.status(400).json({ message: 'Tipo de operación inválido. Debe ser "buy" o "sell".' });
+    }
+
+    const usdAmt = Number(usd_amount);
+    if (isNaN(usdAmt) || usdAmt <= 0) {
+      return res.status(400).json({ message: 'usd_amount debe ser un número positivo.' });
+    }
+
+    // Límites de operación
+    const MIN_USD = 1;
+    const MAX_USD = 50000;
+    if (usdAmt < MIN_USD || usdAmt > MAX_USD) {
+      return res.status(400).json({ 
+        message: `Monto fuera de rango. Mínimo: $${MIN_USD} USD, Máximo: $${MAX_USD} USD.` 
+      });
+    }
+
+    // 2. Iniciar transacción de base de datos
     await connection.beginTransaction();
 
-    if (type !== 'buy' && type !== 'sell') {
-        await connection.rollback();
-        return res.status(400).json({ message: `Tipo de operación inválido: '${type}'` });
-    }
+    // 3. Obtener TODAS las configuraciones desde la DB (única fuente de verdad)
+    const [settingsRows] = await connection.query(
+      'SELECT key_name, value FROM settings WHERE key_name IN (?, ?, ?)',
+      ['rate_buy', 'rate_sell', 'commission_percent']
+    );
 
-    // Leer porcentaje de comisión desde settings (si existe) EARLY so server uses it
-    // to compute the effective rate and final amounts (backend authoritative).
-    let commissionPercent = 2.0; // default 2%
-    try {
-      const [settingRows] = await connection.query('SELECT value FROM settings WHERE key_name = ?', ['commission_percent']);
-      if (settingRows && settingRows[0] && settingRows[0].value) {
-        const parsed = parseFloat(settingRows[0].value);
-        if (!isNaN(parsed)) commissionPercent = parsed;
-      }
-    } catch (e) {
-      console.error('Error leyendo setting commission_percent, usando default 2%:', e && e.message ? e.message : e);
-    }
+    const settings = {};
+    settingsRows.forEach(row => {
+      settings[row.key_name] = Number(row.value);
+    });
 
-    // 3. Determine what the branch needs to pay and check inventory
-    //    'currency_to' is always what the branch pays out and what we must verify.
-    const currencyToVerify = currency_to;
-    const currencyToReceive = currency_from;
+    const rateBuy = settings['rate_buy'] || 17.8;
+    const rateSell = settings['rate_sell'] || 18.2;
+    const commissionPercent = settings['commission_percent'] || 2.0;
 
-    // Prefer base_rate sent by client (the locked base rate). The server will
-    // compute the effective rate using its commissionPercent to avoid trusting
-    // a client-provided effective rate.
-    const baseRateFromClient = req.body.base_rate !== undefined ? Number(req.body.base_rate) : null;
-    if (baseRateFromClient !== null && (isNaN(baseRateFromClient) || baseRateFromClient <= 0)) {
-      await connection.rollback();
-      return res.status(400).json({ message: 'base_rate inválida en la solicitud.' });
-    }
+    // 4. Determinar tasa base según tipo de operación
+    // - buy: Cliente COMPRA USD → usa tasa de VENTA de la sucursal (rateSell)
+    // - sell: Cliente VENDE USD → usa tasa de COMPRA de la sucursal (rateBuy)
+    const baseRate = type === 'buy' ? rateSell : rateBuy;
 
-    // Compute server-effective rate using commissionPercent
-    const cp = Number(commissionPercent) || 0;
-    // If client provided base_rate, use it; otherwise fall back to exchange_rate logic
-    let baseRate = null;
-    if (baseRateFromClient !== null) {
-      baseRate = baseRateFromClient;
-    } else {
-      // fallback: derive baseRate from provided exchange_rate and server cp
-      const effectiveRateFromClient = Number(exchange_rate);
-      if (isNaN(effectiveRateFromClient) || effectiveRateFromClient <= 0) {
-        await connection.rollback();
-        return res.status(400).json({ message: 'Exchange rate inválida en la solicitud.' });
-      }
-      if (cp === 0) baseRate = effectiveRateFromClient;
-      else if (type === 'buy') baseRate = effectiveRateFromClient / (1 + cp / 100.0);
-      else baseRate = effectiveRateFromClient / (1 - cp / 100.0);
-    }
+    // 5. Calcular tasa efectiva con comisión
+    const effectiveRate = calculateEffectiveRate(baseRate, commissionPercent, type);
 
-    if (!baseRate || isNaN(baseRate) || baseRate <= 0) {
-      await connection.rollback();
-      return res.status(400).json({ message: 'No se pudo determinar la tasa base para la transacción.' });
-    }
-
-    // Now compute serverEffectiveRate using server commissionPercent
-    const serverEffectiveRate = type === 'buy' ? Number((baseRate * (1 + cp / 100)).toFixed(6)) : Number((baseRate * (1 - cp / 100)).toFixed(6));
-
-    // Compute server-side final amounts:
-    // - For 'buy': client requests USD (amount_to) -> server computes MXN to charge (ROUNDED, no decimals)
-    // - For 'sell': client delivers USD (amount_from) -> server computes MXN to pay (ROUNDED, no decimals)
-    // USD keeps 2 decimals, MXN is rounded to whole numbers (no cents)
-    let serverAmountFrom = 0; // MXN when buying, USD when selling (matches currency_from)
-    let serverAmountTo = 0;   // USD when buying, MXN when selling (matches currency_to)
+    // 6. Calcular montos (todo en el servidor)
+    let mxnAmount, commissionMXN;
+    let serverAmountFrom, serverAmountTo;
+    let currencyFrom, currencyTo;
 
     if (type === 'buy') {
-      const usdRequested = Number(amount_to);
-      serverAmountTo = usdRequested;
-      // MXN que paga el cliente: redondear sin decimales (Math.round)
-      serverAmountFrom = Math.round(usdRequested * serverEffectiveRate);
+      // Cliente COMPRA USD: paga MXN, recibe USD
+      mxnAmount = roundMXN(usdAmt * effectiveRate);
+      const mxnWithoutCommission = roundMXN(usdAmt * baseRate);
+      commissionMXN = mxnAmount - mxnWithoutCommission;
+      
+      serverAmountFrom = mxnAmount;    // MXN que paga el cliente
+      serverAmountTo = roundUSD(usdAmt); // USD que recibe el cliente
+      currencyFrom = 'MXN';
+      currencyTo = 'USD';
     } else {
-      const usdDelivered = Number(amount_from);
-      serverAmountFrom = usdDelivered;
-      // MXN que recibe el cliente: redondear sin decimales (Math.round)
-      serverAmountTo = Math.round(usdDelivered * serverEffectiveRate);
+      // Cliente VENDE USD: entrega USD, recibe MXN
+      mxnAmount = roundMXN(usdAmt * effectiveRate);
+      const mxnWithoutCommission = roundMXN(usdAmt * baseRate);
+      commissionMXN = mxnWithoutCommission - mxnAmount;
+      
+      serverAmountFrom = roundUSD(usdAmt); // USD que entrega el cliente
+      serverAmountTo = mxnAmount;          // MXN que recibe el cliente
+      currencyFrom = 'USD';
+      currencyTo = 'MXN';
     }
 
-    // Validate server computed amounts
-    if (isNaN(serverAmountFrom) || isNaN(serverAmountTo) || serverAmountFrom <= 0 || serverAmountTo <= 0) {
+    // Asegurar que comisión no sea negativa
+    if (commissionMXN < 0) commissionMXN = 0;
+
+    // Validar montos calculados
+    if (serverAmountFrom <= 0 || serverAmountTo <= 0) {
       await connection.rollback();
-      return res.status(400).json({ message: 'Los montos calculados de la transacción no son válidos.' });
+      return res.status(400).json({ message: 'Los montos calculados no son válidos.' });
     }
 
-    // 4. Lock inventory row and check for sufficient funds
+    // 7. Determinar qué verificar en inventario
+    // La sucursal ENTREGA lo que el cliente RECIBE (currency_to)
+    // La sucursal RECIBE lo que el cliente ENTREGA (currency_from)
+    const currencyToVerify = currencyTo;    // Lo que entrega la sucursal
+    const currencyToReceive = currencyFrom; // Lo que recibe la sucursal
+    const amountToVerify = serverAmountTo;
+
+    // 8. Bloquear fila de inventario y verificar fondos
     const [inventoryRows] = await connection.query(
       'SELECT amount FROM inventory WHERE branch_id = ? AND currency = ? FOR UPDATE',
-      [branch_id, currencyToVerify]
+      [branchIdNum, currencyToVerify]
     );
 
     const totalInventoryAmount = inventoryRows[0]?.amount;
@@ -132,17 +137,19 @@ const createTransaction = async (req, res, next) => {
 
     // 4.b Calcular cuánto está actualmente reservado (pero no comprometido aún)
     // Esto evita sobreventa: si alguien ya reservó dinero, no podemos reservarlo de nuevo
+    // FOR UPDATE bloquea las filas de reservaciones para evitar race conditions
     const [reservedRows] = await connection.query(
       `SELECT COALESCE(SUM(amount_reserved), 0) as total_reserved 
        FROM inventory_reservations 
-       WHERE branch_id = ? AND currency = ? AND status = 'reserved'`,
-      [branch_id, currencyToVerify]
+       WHERE branch_id = ? AND currency = ? AND status = 'reserved'
+       FOR UPDATE`,
+      [branchIdNum, currencyToVerify]
     );
 
     const totalReservedAmount = reservedRows && reservedRows[0] ? Number(reservedRows[0].total_reserved) : 0;
     const actuallyAvailableAmount = totalInventoryAmount - totalReservedAmount;
 
-    console.log(`[INVENTORY CHECK] Sucursal ${branch_id}, ${currencyToVerify}:`, {
+    console.log(`[INVENTORY CHECK] Sucursal ${branchIdNum}, ${currencyToVerify}:`, {
       total: totalInventoryAmount,
       reserved: totalReservedAmount,
       available: actuallyAvailableAmount,
@@ -153,29 +160,14 @@ const createTransaction = async (req, res, next) => {
     // the branch actually needs to pay out.
     if (actuallyAvailableAmount < serverAmountTo) {
       await connection.rollback();
-      return res.status(409).json({ // 409 Conflict is a good status code here
+      return res.status(409).json({
         message: `Lo sentimos. La sucursal seleccionada no cuenta con fondos suficientes (${currencyToVerify}) para esta operación. Disponible: $${actuallyAvailableAmount.toFixed(2)}, Solicitado: $${serverAmountTo.toFixed(2)}. Por favor, intenta un monto menor o selecciona una sucursal diferente.`
       });
     }
 
-  // 5. Calculate commission for the transaction.
-  // Calcularemos la comisión en MXN como la diferencia entre
-  // el monto cobrado y lo que correspondería al valor según la tasa base.
-  // La comisión también se redondea a entero (sin centavos)
-    let commissionAmount = 0;
-    try {
-      // baseRate ya está disponible y serverEffectiveRate también
-      if (type === 'buy') {
-        // Cliente paga MXN (serverAmountFrom) y recibe USD (serverAmountTo)
-        commissionAmount = Math.round(serverAmountFrom - (serverAmountTo * baseRate));
-      } else {
-        commissionAmount = Math.round((serverAmountFrom * baseRate) - serverAmountTo);
-      }
-      if (isNaN(commissionAmount) || commissionAmount < 0) commissionAmount = 0;
-    } catch (e) {
-      console.warn('Error calculando comisión a partir de la tasa y porcentaje, usando fallback:', e && e.message ? e.message : e);
-      commissionAmount = 0;
-    }
+    // 9. La comisión ya fue calculada arriba (commissionMXN)
+    // Usarla directamente en lugar de recalcular
+    const commissionAmount = commissionMXN;
 
     // IMPORTANTE: NO se descuenta el inventario aquí.
     // Solo se crea la reserva en inventory_reservations.
@@ -206,12 +198,12 @@ const createTransaction = async (req, res, next) => {
       expiresAt.setHours(expiresAt.getHours() + 24);
     }
 
-    // 6. Create the transaction record
+    // 10. Create the transaction record
     const code = generateTransactionCode();
     const [result] = await connection.query(
       'INSERT INTO transactions (user_id, branch_id, type, amount_from, currency_from, amount_to, currency_to, exchange_rate, commission_percent, commission_amount, method, status, transaction_code, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       // Usar 'reserved' como estado inicial: la transacción se reserva primero antes de procesar el pago.
-      [userId, branch_id, type, serverAmountFrom, currency_from, serverAmountTo, currency_to, serverEffectiveRate, commissionPercent, commissionAmount, method || null, 'reserved', code, expiresAt]
+      [userId, branchIdNum, type, serverAmountFrom, currencyFrom, serverAmountTo, currencyTo, effectiveRate, commissionPercent, commissionAmount, method || null, 'reserved', code, expiresAt]
     );
     const newTransactionId = result.insertId;
 
@@ -224,7 +216,7 @@ const createTransaction = async (req, res, next) => {
       await connection.query(
         'INSERT INTO inventory_reservations (transaction_id, branch_id, currency, amount_reserved, status, expires_at) VALUES (?, ?, ?, ?, ?, ?) ',
         // Use serverAmountTo: la cantidad que la sucursal apartó para entregar
-        [newTransactionId, branch_id, currencyToVerify, serverAmountTo, 'reserved', reservationExpiresAt]
+        [newTransactionId, branchIdNum, currencyToVerify, serverAmountTo, 'reserved', reservationExpiresAt]
       );
     } catch (resErr) {
       console.warn('No se pudo crear inventory_reservation:', resErr && resErr.message ? resErr.message : resErr);
@@ -249,7 +241,7 @@ const createTransaction = async (req, res, next) => {
     // Emitir evento de sockets para notificar a clientes en tiempo real
     try {
       // Intentar consultar inventario actualizado para la sucursal y monedas afectadas
-      const [invRowsAfter] = await pool.query('SELECT currency, amount, low_stock_threshold FROM inventory WHERE branch_id = ? AND currency IN (?, ?) LIMIT 2', [branch_id, currencyToVerify, currencyToReceive]);
+      const [invRowsAfter] = await pool.query('SELECT currency, amount, low_stock_threshold FROM inventory WHERE branch_id = ? AND currency IN (?, ?) LIMIT 2', [branchIdNum, currencyToVerify, currencyToReceive]);
       const inventorySnapshot = {};
       if (invRowsAfter && invRowsAfter.length) {
         invRowsAfter.forEach(r => { inventorySnapshot[r.currency] = { amount: Number(r.amount), low_stock_threshold: r.low_stock_threshold ? Number(r.low_stock_threshold) : null }; });
@@ -258,7 +250,7 @@ const createTransaction = async (req, res, next) => {
       const socketPayload = {
         transaction: rowsTx[0],
         inventory: inventorySnapshot,
-        branch_id: branch_id,
+        branch_id: branchIdNum,
         timestamp: new Date().toISOString()
       };
 
@@ -283,7 +275,7 @@ const createTransaction = async (req, res, next) => {
               message: `Código ${tx.transaction_code} en sucursal ${tx.branch_name}`,
               event_type: 'transaction_reserved',
               transaction_id: tx.id,
-              branch_id: branch_id,
+              branch_id: branchIdNum,
               created_at: new Date().toISOString()
             });
           } catch (emitNoteErr) {
@@ -294,7 +286,7 @@ const createTransaction = async (req, res, next) => {
           try {
             await pool.query(
               'INSERT INTO notifications (recipient_role, recipient_user_id, branch_id, title, message, event_type, transaction_id) VALUES (?,?,?,?,?,?,?)',
-              ['sucursal', null, branch_id, 'Nueva operación en tu sucursal', `Operación ${tx.transaction_code}: ${tx.type === 'buy' ? 'Compra' : 'Venta'} de ${tx.amount_to} ${tx.currency_to}`, 'transaction_reserved', tx.id]
+              ['sucursal', null, branchIdNum, 'Nueva operación en tu sucursal', `Operación ${tx.transaction_code}: ${tx.type === 'buy' ? 'Compra' : 'Venta'} de ${tx.amount_to} ${tx.currency_to}`, 'transaction_reserved', tx.id]
             );
           } catch (insSucErr) {
             console.warn('No se pudo guardar notificación sucursal:', insSucErr && insSucErr.message ? insSucErr.message : insSucErr);
@@ -302,12 +294,12 @@ const createTransaction = async (req, res, next) => {
           
           // Emitir a sala de la sucursal
           try {
-            global.io.to(`branch:${branch_id}`).emit('notification', {
+            global.io.to(`branch:${branchIdNum}`).emit('notification', {
               title: 'Nueva operación en tu sucursal',
               message: `Operación ${tx.transaction_code}: ${tx.type === 'buy' ? 'Compra' : 'Venta'} de ${tx.amount_to} ${tx.currency_to}`,
               event_type: 'transaction_reserved',
               transaction_id: tx.id,
-              branch_id: branch_id,
+              branch_id: branchIdNum,
               created_at: new Date().toISOString()
             });
           } catch (emitBranchErr) {

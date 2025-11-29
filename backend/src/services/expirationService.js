@@ -95,7 +95,8 @@ class TransactionExpirationService {
         LEFT JOIN payments p ON t.id = p.transaction_id
         WHERE t.expires_at IS NOT NULL
           AND t.expires_at <= NOW()
-          AND t.status IN ('reserved', 'ready_to_receive', 'ready_for_pickup')
+          AND t.status IN ('pending', 'reserved', 'ready_to_receive', 'ready_for_pickup')
+          AND t.status NOT IN ('paid', 'completed', 'cancelled', 'expired')
         ORDER BY t.expires_at ASC
       `);
 

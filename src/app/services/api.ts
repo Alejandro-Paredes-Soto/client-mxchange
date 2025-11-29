@@ -150,6 +150,66 @@ export function saveTransactionMock(tx: Transaction) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, 50)));
 }
 
+// ============================================================================
+// CÁLCULO DE OPERACIÓN (Backend Authoritative)
+// El frontend NO calcula montos, comisiones ni tasas.
+// Este endpoint devuelve TODOS los cálculos listos para mostrar.
+// ============================================================================
+
+export type OperationCalculation = {
+    type: 'buy' | 'sell';
+    usd_amount: number;
+    mxn_amount: number;
+    base_rate: number;
+    effective_rate: number;
+    commission_percent: number;
+    commission_mxn: number;
+    currency_from: 'MXN' | 'USD';
+    currency_to: 'MXN' | 'USD';
+    amount_from: number;
+    amount_to: number;
+    inventory: {
+        branch_id: number;
+        available: number;
+        status: 'available' | 'insufficient' | 'error' | 'unknown';
+    } | null;
+};
+
+export type CalculateOperationResponse = {
+    success: boolean;
+    calculation: OperationCalculation;
+    calculated_at: string;
+    valid_for_seconds: number;
+};
+
+export async function calculateOperation(
+    type: 'buy' | 'sell',
+    usdAmount: number,
+    branchId?: number
+): Promise<CalculateOperationResponse> {
+    if (!API_BASE) {
+        throw new Error('API no configurada');
+    }
+
+    const res = await fetch(`${API_BASE}/public/calculate-operation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            type,
+            usd_amount: usdAmount,
+            branch_id: branchId || null
+        }),
+    });
+
+    const data = await res.json();
+    
+    if (!res.ok) {
+        throw { response: { status: res.status, data } };
+    }
+
+    return data as CalculateOperationResponse;
+}
+
 // Admin types & API helpers
 export type AdminInventoryItem = {
     id: number;

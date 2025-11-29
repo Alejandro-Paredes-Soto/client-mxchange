@@ -51,6 +51,101 @@ const createPaymentIntent = async (req, res, next) => {
       });
     }
 
+    // =========================================================================
+    // PROTECCIÓN: Validar monto para evitar overflow y fraude
+    // =========================================================================
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({
+        message: 'El monto debe ser un número positivo.',
+        code: 'INVALID_AMOUNT'
+      });
+    }
+
+    // Límites razonables (en MXN para pagos de Stripe)
+    // MAX_USD = 50,000 * tasa ~20 = ~1,000,000 MXN máximo
+    const MIN_MXN = 1;
+    const MAX_MXN = 1500000; // 1.5 millones MXN como límite de seguridad
+    if (numAmount < MIN_MXN || numAmount > MAX_MXN) {
+      return res.status(400).json({
+        message: `Monto fuera de rango permitido. Mínimo: $${MIN_MXN} MXN, Máximo: $${MAX_MXN.toLocaleString()} MXN.`,
+        code: 'AMOUNT_OUT_OF_RANGE'
+      });
+    }
+
+    // =========================================================================
+    // PROTECCIÓN: Verificar que la transacción existe y está en estado válido
+    // No permitir pagos para transacciones expiradas, canceladas o ya pagadas
+    // =========================================================================
+    if (transaction_code) {
+      const [txCheck] = await pool.query(
+        'SELECT id, status, expires_at FROM transactions WHERE transaction_code = ? LIMIT 1',
+        [transaction_code]
+      );
+
+      if (!txCheck || !txCheck.length) {
+        return res.status(404).json({
+          message: 'Transacción no encontrada',
+          code: 'TRANSACTION_NOT_FOUND'
+        });
+      }
+
+      const txStatus = txCheck[0].status;
+      const expiresAt = txCheck[0].expires_at;
+
+      // Verificar si ya expiró por tiempo (aunque el cron no haya corrido aún)
+      if (expiresAt && new Date(expiresAt) < new Date()) {
+        console.warn(`⚠️ Intento de pago en transacción expirada por tiempo: ${transaction_code}`);
+        return res.status(400).json({
+          message: 'Esta operación ha expirado. Por favor genera una nueva orden.',
+          code: 'TRANSACTION_EXPIRED'
+        });
+      }
+
+      // Verificar estados que no permiten pago
+      if (txStatus === 'expired') {
+        console.warn(`⚠️ Intento de pago en transacción expirada: ${transaction_code}`);
+        return res.status(400).json({
+          message: 'Esta operación ha expirado. Por favor genera una nueva orden.',
+          code: 'TRANSACTION_EXPIRED'
+        });
+      }
+
+      if (txStatus === 'cancelled') {
+        console.warn(`⚠️ Intento de pago en transacción cancelada: ${transaction_code}`);
+        return res.status(400).json({
+          message: 'Esta operación fue cancelada y no puede ser pagada.',
+          code: 'TRANSACTION_CANCELLED'
+        });
+      }
+
+      if (txStatus === 'paid') {
+        console.warn(`⚠️ Intento de pago duplicado en transacción ya pagada: ${transaction_code}`);
+        return res.status(400).json({
+          message: 'Esta operación ya fue pagada.',
+          code: 'TRANSACTION_ALREADY_PAID'
+        });
+      }
+
+      if (txStatus === 'completed') {
+        console.warn(`⚠️ Intento de pago en transacción completada: ${transaction_code}`);
+        return res.status(400).json({
+          message: 'Esta operación ya fue completada.',
+          code: 'TRANSACTION_COMPLETED'
+        });
+      }
+
+      // Estados válidos para pagar: pending, reserved, ready_to_receive, ready_for_pickup
+      const validStatuses = ['pending', 'reserved', 'ready_to_receive', 'ready_for_pickup'];
+      if (!validStatuses.includes(txStatus)) {
+        console.warn(`⚠️ Intento de pago en transacción con estado inválido (${txStatus}): ${transaction_code}`);
+        return res.status(400).json({
+          message: `Esta operación no puede ser pagada en su estado actual (${txStatus}).`,
+          code: 'INVALID_TRANSACTION_STATUS'
+        });
+      }
+    }
+
     // Stripe espera el monto en centavos
     const amountInCents = Math.round(Number(amount) * 100);
 
@@ -365,9 +460,73 @@ async function handlePaymentSuccess(paymentIntent) {
  * Actualiza una transacción a estado 'paid' y envía notificaciones
  * IMPORTANTE: Al marcar como 'paid', NO se descuenta el inventario todavía.
  * El inventario se ajustará cuando la transacción se complete (estado 'completed').
+ * 
+ * PROTECCIÓN: No se puede marcar como pagada una transacción ya expirada/cancelada.
  */
 async function updateTransactionToPaid(txId, txCode) {
   try {
+    // Verificar estado actual antes de actualizar
+    const [currentRows] = await pool.query(
+      'SELECT status FROM transactions WHERE id = ? LIMIT 1',
+      [txId]
+    );
+
+    if (!currentRows || !currentRows.length) {
+      console.error(`⚠️ [PAYMENT] Transacción ${txId} no encontrada`);
+      return { success: false, reason: 'not_found' };
+    }
+
+    const currentStatus = currentRows[0].status;
+
+    // Si ya expiró o está cancelada, NO actualizar
+    if (currentStatus === 'expired') {
+      console.error(`🚨 [PAYMENT ALERT] Pago recibido para transacción EXPIRADA ${txId} (${txCode})`);
+      // Notificar a admins para procesar reembolso
+      try {
+        await pool.query(
+          `INSERT INTO notifications (recipient_role, title, message, event_type, transaction_id) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            'admin',
+            '🚨 URGENTE: Pago recibido en transacción expirada',
+            `Se recibió un pago de Stripe para la transacción ${txCode} que YA ESTABA EXPIRADA. Se requiere procesar reembolso inmediato.`,
+            'payment_on_expired',
+            txId
+          ]
+        );
+      } catch (notifErr) {
+        console.error('Error creando notificación de pago en expirada:', notifErr.message);
+      }
+      return { success: false, reason: 'expired' };
+    }
+
+    if (currentStatus === 'cancelled') {
+      console.error(`🚨 [PAYMENT ALERT] Pago recibido para transacción CANCELADA ${txId} (${txCode})`);
+      try {
+        await pool.query(
+          `INSERT INTO notifications (recipient_role, title, message, event_type, transaction_id) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            'admin',
+            '🚨 URGENTE: Pago recibido en transacción cancelada',
+            `Se recibió un pago de Stripe para la transacción ${txCode} que estaba CANCELADA. Se requiere procesar reembolso.`,
+            'payment_on_cancelled',
+            txId
+          ]
+        );
+      } catch (notifErr) {
+        console.error('Error creando notificación de pago en cancelada:', notifErr.message);
+      }
+      return { success: false, reason: 'cancelled' };
+    }
+
+    // Si ya está pagada o completada, no hacer nada (idempotencia)
+    if (currentStatus === 'paid' || currentStatus === 'completed') {
+      console.log(`ℹ️ [PAYMENT] Transacción ${txId} ya está en estado ${currentStatus}, ignorando`);
+      return { success: true, reason: 'already_paid' };
+    }
+
+    // Ahora sí, actualizar a pagado
     await pool.query('UPDATE transactions SET status = ? WHERE id = ?', ['paid', txId]);
 
     // Obtener información completa de la transacción
@@ -493,8 +652,10 @@ async function updateTransactionToPaid(txId, txCode) {
     }
 
     console.log('✓ Transacción actualizada a paid y notificaciones enviadas');
+    return { success: true };
   } catch (err) {
     console.error('Error en updateTransactionToPaid:', err.message);
+    return { success: false, reason: 'error', error: err.message };
   }
 }
 

@@ -1,222 +1,147 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Cookies from 'js-cookie';
-import { listBranches, Rates, createTransactionApi } from "@/app/services/api";
+import { listBranches, Rates, createTransactionApi, calculateOperation, OperationCalculation } from "@/app/services/api";
 import { debounce } from 'lodash';
 import { useSocket } from '@/providers/SocketProvider';
 import { toast } from 'sonner';
 import { NumberInput } from "./ui/number-input";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 
-type OperationType = 'buy' | 'sell'; // Represents the user's goal: buying or selling USD.
+type OperationType = 'buy' | 'sell';
 
 type Props = {
   initialMode?: OperationType;
-  rates: Rates | null;
+  rates: Rates | null; // Solo para mostrar en UI, NO para cálculos
   onReserved?: (txCode: string) => void;
 };
 
+/**
+ * OperationForm - Formulario de operaciones de cambio
+ * 
+ * IMPORTANTE: Este componente NO realiza cálculos de montos, comisiones ni tasas.
+ * Todos los cálculos son realizados por el backend para evitar manipulación.
+ * 
+ * Flujo:
+ * 1. Usuario ingresa monto en USD
+ * 2. Frontend llama a /public/calculate-operation
+ * 3. Backend devuelve todos los valores calculados
+ * 4. Frontend muestra los valores (sin modificarlos)
+ * 5. Al reservar, se envían solo datos mínimos al backend que recalcula todo
+ */
 const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved }) => {
   const [operationType, setOperationType] = useState<OperationType>(initialMode);
 
-  // State for the two input fields
-  const [fromAmount, setFromAmount] = useState<string>('');
-  const [toAmount, setToAmount] = useState<string>('');
+  // Input del usuario: solo USD amount
+  const [usdInput, setUsdInput] = useState<string>('');
 
-  // State for currencies in each field
-  const [fromCurrency, setFromCurrency] = useState('MXN');
-  const [toCurrency, setToCurrency] = useState('USD');
-
-  // Función para redondear MXN (sin centavos)
-  // Si centavos >= 50, redondea arriba; si < 50, redondea abajo
-  const roundMXN = (amount: number): number => {
-    return Math.round(amount);
-  };
+  // Datos calculados por el backend (NUNCA calculados en frontend)
+  const [calculation, setCalculation] = useState<OperationCalculation | null>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [calculationError, setCalculationError] = useState<string | null>(null);
 
   // Branch and method state
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [branchId, setBranchId] = useState<number | ''>('');
   const [method, setMethod] = useState<string>('En sucursal');
-  const [commissionPercent, setCommissionPercent] = useState<number | null>(null);
 
   // UI state
   const [error, setError] = useState<string | null>(null);
+  const [negativeWarning, setNegativeWarning] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const socket = useSocket();
+
+  // Referencia para el debounce
+  const calculateDebounceRef = useRef<ReturnType<typeof debounce> | null>(null);
 
   // Tipos para payload de inventory.updated
   type InventoryItem = { amount: number; low_stock_threshold: number | null };
   type InventoryPayload = { transaction?: unknown; inventory?: Record<string, InventoryItem>; branch_id?: number };
 
-  // Determine the correct exchange rate based on the user's goal
-  const getRate = useCallback(() => {
-    if (!rates) return null;
-    // If user wants to BUY USD, the branch SELLS USD to them. Use the SELL rate.
-    // If user wants to SELL USD, the branch BUYS USD from them. Use the BUY rate.
-    // NOTE: this returns the base market rate (from backend) — the commission (spread)
-    // will be applied later to compute the effective rate sent to the backend.
-    return operationType === 'buy' ? rates.usd.sell : rates.usd.buy;
-  }, [rates, operationType]);
+  // ============================================================================
+  // CÁLCULO VÍA BACKEND (única fuente de verdad)
+  // ============================================================================
+  const fetchCalculation = useCallback(async (usdAmount: number, type: OperationType, branch?: number) => {
+    if (usdAmount <= 0) {
+      setCalculation(null);
+      setCalculationError(null);
+      return;
+    }
 
-  // Lock the base rate as soon as it is available so it does NOT change after
-  // the initial calculation (user requested behaviour).
-  const [lockedBaseRate, setLockedBaseRate] = useState<number | null>(null);
+    setIsCalculating(true);
+    setCalculationError(null);
 
+    try {
+      const response = await calculateOperation(type, usdAmount, branch || undefined);
+      
+      if (response.success && response.calculation) {
+        setCalculation(response.calculation);
+        
+        // Verificar inventario
+        if (response.calculation.inventory?.status === 'insufficient') {
+          setCalculationError('Fondos insuficientes en esta sucursal para el monto solicitado.');
+        }
+      }
+    } catch (err: unknown) {
+      console.error('Error calculando operación:', err);
+      const httpErr = err as { response?: { status?: number; data?: { message?: string } } };
+      setCalculationError(httpErr.response?.data?.message || 'Error calculando la operación. Intenta de nuevo.');
+      setCalculation(null);
+    } finally {
+      setIsCalculating(false);
+    }
+  }, []);
+
+  // Crear debounce para el cálculo
   useEffect(() => {
-    if (lockedBaseRate === null) {
-      const r = getRate();
-      if (typeof r === 'number' && !isNaN(r)) {
-        setLockedBaseRate(r);
-      }
-    }
-    // We intentionally only set lockedBaseRate once when it's null. getRate is
-    // included so the effect runs when rates become available, but the lock
-    // prevents further updates.
-  }, [getRate, lockedBaseRate]);
-
-  // Debounced calculation handlers (useMemo + cleanup to avoid hook dependency lint issues)
-  // Use the locked base rate when present, otherwise fall back to current rate
-  const baseRate = lockedBaseRate ?? getRate();
-
-  const getEffectiveRate = useCallback(() => {
-    const base = baseRate;
-    if (!base) return null;
-    const cp = commissionPercent ?? 0;
-    if (!cp) return base;
-    if (operationType === 'buy') {
-      return base * (1 + cp / 100);
-    }
-    return base * (1 - cp / 100);
-  }, [baseRate, commissionPercent, operationType]);
-
-  const debouncedCalculateTo = React.useMemo(() => debounce((amount: string) => {
-    const rateEff = getEffectiveRate();
-    if (rateEff && amount) {
+    calculateDebounceRef.current = debounce((amount: string, type: OperationType, branch: number | '') => {
       const numAmount = parseFloat(amount);
-      // When buying USD: fromAmount (MXN) / effectiveRate = toAmount (USD)
-      // When selling USD: fromAmount (USD) * effectiveRate = toAmount (MXN)
-      let result = operationType === 'buy'
-        ? numAmount / rateEff
-        : numAmount * rateEff;
-
-      // Si el resultado es MXN (venta), redondearlo sin centavos
-      if (operationType === 'sell') {
-        result = roundMXN(result);
-        setToAmount(result.toFixed(0)); // Sin decimales para MXN
+      if (!isNaN(numAmount) && numAmount > 0) {
+        fetchCalculation(numAmount, type, branch ? Number(branch) : undefined);
       } else {
-        setToAmount(result.toFixed(2)); // USD mantiene 2 decimales
+        setCalculation(null);
+        setCalculationError(null);
       }
-    } else {
-      setToAmount('');
-    }
-  }, 300), [getEffectiveRate, operationType]);
+    }, 500);
 
-  const debouncedCalculateFrom = React.useMemo(() => debounce((amount: string) => {
-    const rateEff = getEffectiveRate();
-    if (rateEff && amount) {
-      const numAmount = parseFloat(amount);
-      // When buying USD: toAmount (USD) * effectiveRate = fromAmount (MXN)
-      // When selling USD: toAmount (MXN) / effectiveRate = fromAmount (USD)
-      let result = operationType === 'buy'
-        ? numAmount * rateEff
-        : numAmount / rateEff;
-
-      // Si el resultado es MXN (compra), redondearlo sin centavos
-      if (operationType === 'buy') {
-        result = roundMXN(result);
-        setFromAmount(result.toFixed(0)); // Sin decimales para MXN
-      } else {
-        setFromAmount(result.toFixed(2)); // USD mantiene 2 decimales
-      }
-    } else {
-      setFromAmount('');
-    }
-  }, 300), [getEffectiveRate, operationType]);
-
-  // Rates and commission breakdown for UI
-  const effectiveRate = getEffectiveRate();
-  // For commission calculations prefer to use the raw numeric values (not pre-rounded strings)
-  // Aplicar redondeo a MXN para cálculos
-  const rawFrom = operationType === 'buy' ? roundMXN(parseFloat(fromAmount || '0')) : parseFloat(fromAmount || '0');
-  const rawTo = operationType === 'sell' ? roundMXN(parseFloat(toAmount || '0')) : parseFloat(toAmount || '0');
-  let commissionAmountMXN: number | null = null;
-  try {
-    if (baseRate && effectiveRate) {
-      if (operationType === 'buy') {
-        // User pays MXN (fromCurrency = MXN). rawFrom is amount paid by user in MXN.
-        // USD delivered = rawTo (calculated using effectiveRate).
-        const usdDelivered = rawTo; // already calculated using effectiveRate
-        const whatWouldBePaidAtBase = usdDelivered * baseRate;
-        commissionAmountMXN = Math.round(rawFrom - whatWouldBePaidAtBase);
-      } else {
-        // sell: user delivers USD (fromCurrency = USD). rawFrom is USD delivered.
-        const usdDelivered = rawFrom;
-        const whatBranchWouldPayAtBase = usdDelivered * baseRate; // MXN
-        const mxnPaidToUser = rawTo; // calculated using effectiveRate
-        commissionAmountMXN = Math.round(whatBranchWouldPayAtBase - mxnPaidToUser);
-      }
-      if (isNaN(commissionAmountMXN) || commissionAmountMXN < 0) commissionAmountMXN = 0;
-    }
-  } catch {
-    commissionAmountMXN = null;
-  }
-  // Amount according to base rate (without commission). Use rawFrom as the source of truth
-  let amountAccordingToBase: number | null = null;
-  if (baseRate && baseRate > 0) {
-    if (operationType === 'buy') {
-      // User pays MXN, amount according to base rate = MXN / baseRate -> USD
-      amountAccordingToBase = rawFrom / baseRate;
-    } else {
-      // User delivers USD, amount according to base rate = USD * baseRate -> MXN
-      amountAccordingToBase = Math.round(rawFrom * baseRate);
-    }
-    if (isNaN(amountAccordingToBase) || !isFinite(amountAccordingToBase)) amountAccordingToBase = null;
-  }
-
-  // Cleanup debounced functions on unmount
-  useEffect(() => {
     return () => {
-      debouncedCalculateTo.cancel();
-      debouncedCalculateFrom.cancel();
+      calculateDebounceRef.current?.cancel();
     };
-  }, [debouncedCalculateTo, debouncedCalculateFrom]);
-  // Handlers for input changes
-  const handleFromChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setFromAmount(value);
-    setError(null);
-    debouncedCalculateTo(value);
-  };
+  }, [fetchCalculation]);
 
-  // If the 'to' field is ever enabled, this will calculate the 'from' value
-  const handleToChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setToAmount(value);
-    setError(null);
-    debouncedCalculateFrom(value);
-  };
-
-  // Nota: el campo "To" está oculto en la UI actual; si se habilita, reimplementar handleToChange
-
-  // Effect to switch currencies when operation type changes
+  // Trigger cálculo cuando cambia el input, tipo de operación o sucursal
   useEffect(() => {
-    const newOperationType = initialMode;
-    setOperationType(newOperationType);
-
-    // When buying USD: user pays MXN, receives USD
-    // When selling USD: user delivers USD, receives MXN
-    if (newOperationType === 'buy') {
-      setFromCurrency('MXN');
-      setToCurrency('USD');
+    if (usdInput && calculateDebounceRef.current) {
+      calculateDebounceRef.current(usdInput, operationType, branchId);
     } else {
-      setFromCurrency('USD');
-      setToCurrency('MXN');
+      setCalculation(null);
+      setCalculationError(null);
     }
+  }, [usdInput, operationType, branchId]);
 
-    // Clear amounts on mode change
-    setFromAmount('');
-    setToAmount('');
+  // Handler para cambio de input USD
+  const handleUsdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value;
+    
+    // Detectar y eliminar signos negativos
+    if (value.includes('-')) {
+      value = value.replace(/-/g, '');
+      setNegativeWarning(true);
+      // Ocultar el warning después de 3 segundos
+      setTimeout(() => setNegativeWarning(false), 3000);
+    }
+    
+    setUsdInput(value);
+    setError(null);
+  };
+
+  // Effect to switch operation type
+  useEffect(() => {
+    setOperationType(initialMode);
+    setUsdInput('');
+    setCalculation(null);
+    setCalculationError(null);
   }, [initialMode]);
 
   // Effect to fetch branches on component mount
@@ -243,17 +168,12 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         if (typeof payload === 'object' && payload !== null) {
           const p = payload as InventoryPayload;
           if (p.branch_id && Number(p.branch_id) === Number(branchId)) {
-            // Si la actualización pertenece a la sucursal seleccionada, refrescar branches/inventario
-            (async () => {
-              try {
-                const refreshed = await listBranches();
-                setBranches(refreshed.map(b => ({ id: b.id, name: b.name })));
-              } catch {
-                // noop
-              }
-            })();
+            // Refrescar cálculo si hay un monto ingresado
+            if (usdInput && parseFloat(usdInput) > 0) {
+              fetchCalculation(parseFloat(usdInput), operationType, branchId ? Number(branchId) : undefined);
+            }
 
-            // Comprobar umbrales y mostrar toast si está por debajo o igual
+            // Comprobar umbrales y mostrar toast si está por debajo
             const inv = p.inventory as Record<string, { amount: number; low_stock_threshold: number | null }> | undefined;
             if (inv) {
               Object.entries(inv).forEach(([currency, info]) => {
@@ -280,70 +200,38 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         socket.off('inventory.updated', handler);
       }
     };
-  }, [branchId, socket]);
+  }, [branchId, socket, usdInput, operationType, fetchCalculation]);
 
-  // Fetch commission percent from backend public endpoint
-  useEffect(() => {
-    (async () => {
-      try {
-        const resp = await fetch((process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '') + '/public/config/commission');
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if (data && typeof data.commissionPercent === 'number') setCommissionPercent(data.commissionPercent);
-      } catch (e) {
-        console.error('Error loading commission percent', e);
-      }
-    })();
-  }, []);
-
+  // ============================================================================
+  // RESERVAR OPERACIÓN
+  // El backend recalcula todo, solo enviamos datos mínimos
+  // ============================================================================
   const onReserve = async () => {
-    const rate = baseRate;
-    if (!rate) {
-      setError('Las tasas de cambio no están disponibles. Intenta de nuevo.');
+    if (!calculation) {
+      setError('Por favor ingresa un monto válido para calcular la operación.');
       return;
     }
+
     if (!branchId) {
       setError('Debes seleccionar una sucursal.');
       return;
     }
-    let finalFromAmount = parseFloat(fromAmount);
-    let finalToAmount = parseFloat(toAmount);
 
-    if (isNaN(finalFromAmount) || finalFromAmount <= 0 || isNaN(finalToAmount) || finalToAmount <= 0) {
-      setError('Ingresa un monto válido para la operación.');
+    if (calculation.inventory?.status === 'insufficient') {
+      setError('Fondos insuficientes en la sucursal seleccionada.');
       return;
-    }
-
-    // Redondear MXN antes de enviar al backend
-    if (operationType === 'buy') {
-      // Compra: fromAmount es MXN (lo que paga el cliente)
-      finalFromAmount = roundMXN(finalFromAmount);
-    } else {
-      // Venta: toAmount es MXN (lo que recibe el cliente)
-      finalToAmount = roundMXN(finalToAmount);
     }
 
     setIsLoading(true);
     setError(null);
 
+    // Payload mínimo: el backend recalcula TODOS los valores
     const payload = {
       branch_id: branchId,
       type: operationType,
-      amount_from: finalFromAmount,
-      currency_from: fromCurrency,
-      amount_to: finalToAmount,
-      currency_to: toCurrency,
-      // Calculate effective rate (spread) based on commissionPercent if available
-      exchange_rate: (() => {
-        const cp = commissionPercent ?? 0;
-        if (!cp) return rate;
-        if (operationType === 'buy') {
-          // For buying USD, branch sells USD at a higher rate
-          return Number((rate * (1 + cp / 100)).toFixed(6));
-        }
-        // For selling USD, branch buys USD at a lower rate
-        return Number((rate * (1 - cp / 100)).toFixed(6));
-      })(),
+      // Enviamos el monto USD que el usuario quiere (el backend recalcula todo lo demás)
+      usd_amount: calculation.usd_amount,
+      // El método de pago solo es relevante para el flujo
       method: method,
     };
 
@@ -359,18 +247,15 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
       if (res.transaction?.transaction_code) {
         if (onReserved) onReserved(res.transaction.transaction_code);
-        // Emitir actualización de inventario por socket para notificar a otros clientes
+        
+        // Emitir actualización de inventario por socket
         try {
-          // Construir payload de inventario mínimo esperado por admin: { branch_id, inventory: { USD: { amount, low_stock_threshold }, MXN: { ... } } }
           const branchIdNum = Number(branchId);
-          // Intentar leer inventario actualizado desde la respuesta del backend si viene en res.inventory
           const invFromRes = (res.inventory && typeof res.inventory === 'object') ? res.inventory as Record<string, unknown> : undefined;
           if (socket && socket.emit) {
-            console.log('Emitiendo inventory.updated por socket para branch:', branchIdNum, 'invFromRes?', !!invFromRes);
             if (invFromRes) {
               socket.emit('inventory.updated', { branch_id: branchIdNum, inventory: invFromRes, transaction: res.transaction });
             } else {
-              // Si backend no devolvió inventario, enviar una señal para que los suscriptores refresquen la sucursal
               socket.emit('inventory.updated', { branch_id: branchIdNum, refresh: true, transaction: res.transaction });
             }
           }
@@ -378,7 +263,6 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
           console.warn('No se pudo emitir evento de socket inventory.updated', e);
         }
       } else {
-        // Si el backend respondió 200 pero sin transaction_code, mostrar mensaje claro
         setError('No se pudo crear la transacción. Intenta nuevamente.');
         return;
       }
@@ -386,18 +270,26 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       console.error('Error creating transaction:', err);
       const httpErr = err as { response?: { status?: number; data?: { message?: string } } };
       if (httpErr.response?.status === 409) {
-        // Specific error for insufficient funds
         setError(httpErr.response.data?.message || 'Fondos insuficientes.');
       } else if (httpErr.response?.data?.message) {
-        // Other backend errors
         setError(httpErr.response.data.message);
       } else {
-        // Generic network or other errors
         setError('Ocurrió un error inesperado al crear la transacción.');
       }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Cambiar tipo de operación
+  const switchOperationType = (newType: OperationType) => {
+    setOperationType(newType);
+    setUsdInput('');
+    setCalculation(null);
+    setCalculationError(null);
+    setMethod('En sucursal');
+    setError(null);
+    setNegativeWarning(false);
   };
 
   return (
@@ -407,27 +299,13 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
         <div className="flex sm:flex-row flex-col items-stretch sm:items-center gap-2 w-full sm:w-auto">
           <button
             className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
-            onClick={() => {
-              setOperationType('buy');
-              setFromCurrency('MXN');
-              setToCurrency('USD');
-              setFromAmount('');
-              setToAmount('');
-              setMethod('En sucursal');
-            }}
+            onClick={() => switchOperationType('buy')}
           >
             Quiero Comprar Dólares
           </button>
           <button
             className={`cursor-pointer w-full sm:w-auto px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
-            onClick={() => {
-              setOperationType('sell');
-              setFromCurrency('USD');
-              setToCurrency('MXN');
-              setFromAmount('');
-              setToAmount('');
-              setMethod('En sucursal');
-            }}
+            onClick={() => switchOperationType('sell')}
           >
             Quiero Vender Dólares
           </button>
@@ -435,124 +313,148 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
       </header>
 
       <div className="gap-4 grid grid-cols-1">
-        {/* Main input: when buying we show the USD amount the user wants to receive (toAmount),
-            when selling we show the USD the user delivers (fromAmount) */}
-        {operationType === 'buy' ? (
-          <div>
-            <label className="block mb-2 font-medium text-primary">
-              ¿Cuánto Dólar(s) Quieres Recibir?
-            </label>
-            <div className="relative">
-              <NumberInput
-                value={toAmount}
-                onChange={handleToChange}
-                placeholder="0.00"
-                decimals={2}
-                className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg"
-                disabled={isLoading}
-              />
-              <span className="top-1/2 right-3 absolute font-semibold text-gray-500 -translate-y-1/2">{toCurrency}</span>
-            </div>
+        {/* Input principal: siempre USD */}
+        <div>
+          <label className="block mb-2 font-medium text-primary">
+            {operationType === 'buy' 
+              ? '¿Cuántos Dólares Quieres Comprar?' 
+              : '¿Cuántos Dólares Quieres Vender?'}
+          </label>
+          <div className="relative">
+            <NumberInput
+              value={usdInput}
+              onChange={handleUsdInputChange}
+              placeholder="0.00"
+              decimals={2}
+              className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg"
+              disabled={isLoading}
+            />
+            <span className="top-1/2 right-3 absolute font-semibold text-gray-500 -translate-y-1/2">USD</span>
           </div>
-        ) : (
-          <div>
-            <label className="block mb-2 font-medium text-primary">
-              ¿Cuánto Dólar(s) Quieres Vender?
-            </label>
-            <div className="relative">
-              <NumberInput
-                value={fromAmount}
-                onChange={handleFromChange}
-                placeholder="0.00"
-                decimals={2}
-                className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg"
-                disabled={isLoading}
-              />
-              <span className="top-1/2 right-3 absolute font-semibold text-gray-500 -translate-y-1/2">{fromCurrency}</span>
-            </div>
+          <p className="mt-1 text-gray-500 text-xs">Mínimo: $1 USD • Máximo: $50,000 USD</p>
+          {negativeWarning && (
+            <p className="mt-1 font-medium text-red-500 text-xs">
+              ⚠ No se permiten números negativos
+            </p>
+          )}
+        </div>
+
+        {/* Indicador de cálculo */}
+        {isCalculating && (
+          <div className="flex items-center gap-2 text-gray-500 text-sm">
+            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+            </svg>
+            Calculando...
           </div>
         )}
 
+        {/* Error de cálculo */}
+        {calculationError && !isCalculating && (
+          <Alert variant="destructive">
+            <AlertDescription>{calculationError}</AlertDescription>
+          </Alert>
+        )}
 
-        {/* Rate and Commission Info */}
-        <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg text-sm" aria-live="polite">
-          {baseRate && (
+        {/* Información calculada por el backend */}
+        {calculation && !isCalculating && !calculationError && (
+          <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg text-sm" aria-live="polite">
+            {/* Tasas */}
             <div className="mb-3">
-              <span className="font-medium text-gray-700">Tasa de {operationType === 'buy' ? 'Venta' : 'Compra'}:</span>
-              <span className="ml-2 text-gray-600">1 USD ≈ {baseRate.toFixed(4)} MXN</span>
+              <span className="font-medium text-gray-700">
+                Tasa de {operationType === 'buy' ? 'Compra' : 'Venta'}:
+              </span>
+              <span className="ml-2 text-gray-600">
+                1 USD = {calculation.base_rate.toFixed(4)} MXN
+              </span>
             </div>
-          )}
 
-          {commissionPercent !== null && toAmount && !isNaN(Number(toAmount)) && Number(toAmount) > 0 && (
+            {/* Desglose de la operación */}
             <div className="space-y-2 pt-3 border-gray-200 border-t">
               {operationType === 'buy' ? (
                 <>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Monto según tasa de cambio (sin comisión):</span>
-                    <span className="font-medium text-gray-800">{amountAccordingToBase !== null ? amountAccordingToBase.toFixed(2) : '—'} USD</span>
+                    <span className="text-gray-600">Dólares a comprar:</span>
+                    <span className="font-medium text-gray-800">${calculation.usd_amount.toFixed(2)} USD</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Tasa base:</span>
-                    <span className="font-medium text-gray-800">{baseRate ? baseRate.toFixed(4) : '—'} MXN/USD</span>
+                    <span className="font-medium text-gray-800">{calculation.base_rate.toFixed(4)} MXN/USD</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Tasa aplicada (con comisión {commissionPercent}%):</span>
-                    <span className="font-medium text-gray-800">{effectiveRate ? effectiveRate.toFixed(4) : '—'} MXN/USD</span>
+                    <span className="text-gray-600">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
+                    <span className="font-medium text-gray-800">{calculation.effective_rate.toFixed(4)} MXN/USD</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Comisión sucursal aprox.:</span>
-                    <span className="font-medium text-red-600">- {commissionAmountMXN !== null ? commissionAmountMXN.toFixed(0) : '—'} MXN</span>
+                    <span className="text-gray-600">Comisión sucursal:</span>
+                    <span className="font-medium text-red-600">${calculation.commission_mxn.toLocaleString()} MXN</span>
                   </div>
                   <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
                     <div className="flex justify-between items-center">
                       <span className="font-semibold text-green-800">Tú recibirás:</span>
-                      <span className="font-bold text-green-900 text-lg">{toAmount} USD</span>
+                      <span className="font-bold text-green-900 text-lg">${calculation.usd_amount.toFixed(2)} USD</span>
                     </div>
                     <div className="flex justify-between items-center mt-1 text-green-700 text-xs">
                       <span>Pagas en total:</span>
-                      <span>{fromAmount} MXN</span>
+                      <span>${calculation.mxn_amount.toLocaleString()} MXN</span>
                     </div>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Entregas:</span>
-                    <span className="font-medium text-gray-800">{fromAmount} USD</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">Monto según tasa de cambio (sin comisión):</span>
-                    <span className="font-medium text-gray-800">{amountAccordingToBase !== null ? amountAccordingToBase.toFixed(0) : '—'} MXN</span>
+                    <span className="text-gray-600">Dólares a entregar:</span>
+                    <span className="font-medium text-gray-800">${calculation.usd_amount.toFixed(2)} USD</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Tasa base:</span>
-                    <span className="font-medium text-gray-800">{baseRate ? baseRate.toFixed(4) : '—'} MXN/USD</span>
+                    <span className="font-medium text-gray-800">{calculation.base_rate.toFixed(4)} MXN/USD</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Tasa aplicada (con comisión {commissionPercent}%):</span>
-                    <span className="font-medium text-gray-800">{effectiveRate ? effectiveRate.toFixed(4) : '—'} MXN/USD</span>
+                    <span className="text-gray-600">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
+                    <span className="font-medium text-gray-800">{calculation.effective_rate.toFixed(4)} MXN/USD</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-600">Comisión sucursal aprox.:</span>
-                    <span className="font-medium text-red-600">- {commissionAmountMXN !== null ? commissionAmountMXN.toFixed(0) : '—'} MXN</span>
+                    <span className="text-gray-600">Comisión sucursal:</span>
+                    <span className="font-medium text-red-600">${calculation.commission_mxn.toLocaleString()} MXN</span>
                   </div>
                   <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
                     <div className="flex justify-between items-center">
-                      <span className="font-semibold text-green-800">Tú recibirás (después de comisión):</span>
-                      <span className="font-bold text-green-900 text-lg">{toAmount} MXN</span>
+                      <span className="font-semibold text-green-800">Tú recibirás:</span>
+                      <span className="font-bold text-green-900 text-lg">${calculation.mxn_amount.toLocaleString()} MXN</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1 text-green-700 text-xs">
+                      <span>Entregas:</span>
+                      <span>${calculation.usd_amount.toFixed(2)} USD</span>
                     </div>
                   </div>
                 </>
               )}
-            </div>
-          )}
-        </div>
 
-        {/* Branch and Method */}
+              {/* Estado del inventario */}
+              {calculation.inventory && (
+                <div className={`mt-2 text-xs ${calculation.inventory.status === 'available' ? 'text-green-600' : 'text-orange-600'}`}>
+                  {calculation.inventory.status === 'available' 
+                    ? '✓ Fondos disponibles en esta sucursal'
+                    : '⚠ Fondos insuficientes en esta sucursal'}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Sucursal y Método de pago */}
         <div className="flex sm:flex-row flex-col gap-3">
           <div className="flex-1">
             <label htmlFor="branch" className="block mb-2 font-medium text-primary">Sucursal:</label>
-            <select id="branch" value={branchId} onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" disabled={isLoading}>
+            <select 
+              id="branch" 
+              value={branchId} 
+              onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))} 
+              className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" 
+              disabled={isLoading}
+            >
               {branches.length > 0 ? (
                 branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)
               ) : (
@@ -561,13 +463,18 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
             </select>
           </div>
 
-          {/* Method only shows when buying USD */}
+          {/* Método de pago solo para compra */}
           {operationType === 'buy' && (
             <div className="flex-1">
               <label htmlFor="method" className="block mb-2 font-medium text-primary">Método de Pago:</label>
-              <select id="method" value={method} onChange={(e) => setMethod(e.target.value)} className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" disabled={isLoading}>
+              <select 
+                id="method" 
+                value={method} 
+                onChange={(e) => setMethod(e.target.value)} 
+                className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer" 
+                disabled={isLoading}
+              >
                 <option value="En sucursal">En sucursal (efectivo)</option>
-
                 <option value="Tarjeta">Tarjeta de débito/prepago</option>
               </select>
             </div>
@@ -587,7 +494,7 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
           <button
             className="bg-primary hover:bg-primary/90 disabled:opacity-50 px-4 py-3 rounded-lg w-full font-medium text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
             onClick={onReserve}
-            disabled={isLoading}
+            disabled={isLoading || isCalculating || !calculation || !!calculationError}
           >
             {isLoading ? 'Procesando...' : 'Revisar Orden'}
           </button>
