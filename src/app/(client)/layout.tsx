@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SocketProvider, useNotifications } from '@/providers/SocketProvider';
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,6 +29,23 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { notifications, unreadCount, markAllAsRead, reloadFromServer } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [userData, setUserData] = useState<{ name: string; email: string } | null>(null);
+
+  // Obtener datos del usuario del token
+  useEffect(() => {
+    const token = Cookies.get('token');
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          setUserData({ name: payload.name || '', email: payload.email || '' });
+        }
+      } catch (err) {
+        console.error('Error decoding token:', err);
+      }
+    }
+  }, []);
 
   const menuItems = [
     { title: "Comprar dólares", url: "/operacion?mode=buy", icon: DollarSign },
@@ -52,12 +69,9 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   const handleOpenNotifications = async (open: boolean) => {
-    console.log('[CLIENT handleOpenNotifications] open:', open);
     if (open) {
       // Marcar como leídas inmediatamente cuando se abre el panel
-      console.log('[CLIENT handleOpenNotifications] Llamando a markAllAsRead...');
       await markAllAsRead();
-      console.log('[CLIENT handleOpenNotifications] markAllAsRead completado');
     }
     setNotifOpen(open);
   };
@@ -100,6 +114,12 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
           </SidebarGroup>
         </SidebarContent>
         <div className="mt-auto px-4 py-4">
+          {userData && (
+            <div className="mb-3">
+              <p className="font-medium text-sm truncate">{userData.name}</p>
+              <p className="text-muted-foreground text-xs truncate">{userData.email}</p>
+            </div>
+          )}
           <hr className="mb-4 border-gray-300" />
           <SidebarMenu>
             <SidebarMenuItem>

@@ -152,7 +152,7 @@ const useLogin = () => {
       } else {
         window.location.href = "/inicio";
       }
-      console.log('login ok', response.data);
+     
       setLoadingLogin(false);
     }
 
@@ -170,7 +170,7 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
      try {
        setLoadingRegister(true);
        const response = await requestPost(dataRegister, "/auth/register");
-       console.log(response);
+  
 
        if (response?.status === 201 || response?.status === 200){
          // If backend returned a token on registration, use it and redirect
@@ -237,7 +237,6 @@ const onSubmitRegister = async (event: FormEvent<HTMLFormElement>) => {
       // Las cookies son accesibles desde el servidor (a diferencia de localStorage)
       const googleAction = activeForm === 'register' ? 'register' : 'login';
       Cookies.set('googleAuthAction', googleAction, { path: '/', expires: 1/24 }); // Expira en 1 hora
-      console.log('🔐 Iniciando Google Auth con action:', googleAction);
 
       // Dejar que NextAuth maneje la redirección automáticamente
       await signIn("google", { callbackUrl: "/inicio" });

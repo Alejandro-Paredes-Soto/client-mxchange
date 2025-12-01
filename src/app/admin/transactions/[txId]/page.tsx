@@ -59,7 +59,6 @@ export default function AdminTransactionDetail() {
     const txIdToListen = (tx as any).transaction_code || (tx as any).id || txId;
 
     const handleTransactionUpdate = (payload: any) => {
-      console.log('transaction.updated recibido:', payload);
       
       // Verificar si es la transacción actual
       const payloadTxCode = payload.transaction_code || payload.code || payload.id;
@@ -76,7 +75,6 @@ export default function AdminTransactionDetail() {
     };
 
     const handleStatusChange = (payload: any) => {
-      console.log('transaction.status_changed recibido:', payload);
       
       const payloadTxId = payload.transaction_id || payload.id;
       const currentTxId = (tx as any).id;

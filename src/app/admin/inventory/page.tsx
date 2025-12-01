@@ -108,7 +108,6 @@ const AdminInventoryPage = () => {
 
     // handler para actualizaciones por socket
     const handler = (payload: unknown) => {
-      console.log('📡 Evento inventory.updated recibido:', payload);
       try {
         if (typeof payload !== 'object' || payload === null) return;
         const p = payload as { branch_id?: number; inventory?: Record<string, unknown>; refresh?: boolean };
@@ -116,7 +115,6 @@ const AdminInventoryPage = () => {
 
         // SIEMPRE recargar desde el backend para obtener datos completos y actualizados
         // Esto incluye reserved_amount que se calcula en el backend
-        console.log('🔄 Recargando inventario desde el backend...');
         load();
       } catch (err) {
         console.error('Error procesando evento inventory.updated:', err);

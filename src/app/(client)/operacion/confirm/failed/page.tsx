@@ -1,13 +1,13 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000';
 
-export default function FailedPage() {
+function FailedContent() {
   const params = useSearchParams();
   const txCode = params.get('txId');
   const router = useRouter();
@@ -51,5 +51,13 @@ export default function FailedPage() {
         </div>
       )}
     </section>
+  );
+}
+
+export default function FailedPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Cargando…</div>}>
+      <FailedContent />
+    </Suspense>
   );
 }

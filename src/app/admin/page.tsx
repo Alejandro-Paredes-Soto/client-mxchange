@@ -2,13 +2,8 @@
 import { useEffect, useState } from 'react';
 import Cookies from 'js-cookie';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getDashboardChartData, getDashboardKPIs, getRecentTransactions, getInventorySummary } from '../services/api';
+import { getDashboardChartData, getDashboardKPIs, getRecentTransactions, getInventorySummary, Rates } from '../services/api';
 import RateCard from '@/components/RateCard';
-
-// Mock data and types for demonstration
-type Rates = {
-  usd: { buy: number; sell: number };
-};
 
 type KPIs = {
   volumenTransacciones: number;
@@ -79,7 +74,7 @@ const TransactionList = ({ items }: { items: Transaction[] }) => {
 };
 
 const AdminIndex = () => {
-  const [rates, setRates] = useState<Rates | null>({ usd: { buy: 18.5, sell: 19.5 } });
+  const [rates, setRates] = useState<Rates | null>({ usd: { buy: 18.5, sell: 19.5 }, lastUpdated: Date.now() });
   const [kpis, setKpis] = useState<KPIs>({
     volumenTransacciones: 0,
     totalUSDVendidos: 0,

@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
         secret: process.env.NEXTAUTH_SECRET 
     });
 
-    console.log('[middleware] Pathname:', pathname);
+  
 
     // Permitir rutas de NextAuth sin interceptar
     if (pathname.startsWith('/api/auth')) {
@@ -33,7 +33,6 @@ export async function middleware(request: NextRequest) {
     if (nextAuthToken) {
         isAuthenticated = true;
         userRole = (nextAuthToken as any).rol || 'client';
-        console.log('[middleware] Usuario autenticado con NextAuth. Rol:', userRole);
     }
     // Si no, verificar token normal (email/password)
     else if (token) {
@@ -43,7 +42,7 @@ export async function middleware(request: NextRequest) {
             });
             isAuthenticated = true;
             userRole = (payload as { role?: string }).role;
-            console.log('[middleware] Usuario autenticado con token. Rol:', userRole);
+           
         } catch (err: any) {
             console.error('[middleware] Token inválido o expirado:', err?.code || err);
             isAuthenticated = false;
@@ -56,7 +55,6 @@ export async function middleware(request: NextRequest) {
 
     // Si el token expiró, limpiar la cookie y redirigir a login
     if (tokenExpired) {
-        console.log('[middleware] Token expirado, limpiando cookie y redirigiendo a /login');
         const response = NextResponse.redirect(new URL('/login', request.url));
         response.cookies.delete('token');
         return response;
@@ -68,7 +66,6 @@ export async function middleware(request: NextRequest) {
 
     // CASO 1: Usuario autenticado intenta acceder a rutas de auth
     if (isAuthenticated && isAuthRoute) {
-        console.log('[middleware] Usuario autenticado intentando acceder a auth, redirigiendo según rol');
         // Redirigir según el rol del usuario
         if (userRole === 'admin' || userRole === 'sucursal') {
             return NextResponse.redirect(new URL('/admin', request.url));
@@ -81,34 +78,29 @@ export async function middleware(request: NextRequest) {
     // CASO 2: Proteger rutas de ADMIN (solo admin y sucursal)
     if (pathname.startsWith('/admin')) {
         if (!isAuthenticated) {
-            console.log('[middleware] No autenticado, redirigiendo a /login');
             return NextResponse.redirect(new URL('/login', request.url));
         }
 
         // Verificar que sea admin o sucursal
         if (userRole !== 'admin' && userRole !== 'sucursal') {
-            console.log('[middleware] Usuario sin permisos de admin, redirigiendo a /inicio');
             return NextResponse.redirect(new URL('/inicio', request.url));
         }
 
-        console.log('[middleware] Acceso permitido a /admin');
         return NextResponse.next();
     }
 
     // CASO 3: Proteger rutas de CLIENTE (solo clientes autenticados)
     if (pathname.startsWith('/inicio') || pathname.startsWith('/operacion') || pathname.startsWith('/mis-movimientos')) {
         if (!isAuthenticated) {
-            console.log('[middleware] No autenticado, redirigiendo a /login');
+           
             return NextResponse.redirect(new URL('/login', request.url));
         }
 
         // Verificar que NO sea admin o sucursal (solo clientes)
         if (userRole === 'admin' || userRole === 'sucursal') {
-            console.log('[middleware] Admin/Sucursal intentando acceder a rutas de cliente, redirigiendo a /admin');
             return NextResponse.redirect(new URL('/admin', request.url));
         }
 
-        console.log('[middleware] Acceso permitido a ruta de cliente');
         return NextResponse.next();
     }
 

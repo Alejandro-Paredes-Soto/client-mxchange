@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, XCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,7 @@ const humanizeStatus = (status: string): string => {
   return statusMap[status] || status;
 };
 
-export default function SuccessPage() {
+function SuccessContent() {
   const params = useSearchParams();
   const router = useRouter();
   const txCode = params.get('txId');
@@ -262,5 +262,13 @@ export default function SuccessPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Cargando…</div>}>
+      <SuccessContent />
+    </Suspense>
   );
 }

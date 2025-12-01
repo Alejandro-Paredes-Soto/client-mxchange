@@ -9,60 +9,43 @@ import { toast } from 'sonner';
 import { NumberInput } from "./ui/number-input";
 import { Spinner } from "./ui/spinner";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { ArrowRight, Calculator, Building2, CreditCard, DollarSign, Info } from "lucide-react";
 
 type OperationType = 'buy' | 'sell';
 
 type Props = {
   initialMode?: OperationType;
-  rates: Rates | null; // Solo para mostrar en UI, NO para cálculos
+  rates: Rates | null;
   onReserved?: (txCode: string) => void;
 };
 
-/**
- * OperationForm - Formulario de operaciones de cambio
- * 
- * IMPORTANTE: Este componente NO realiza cálculos de montos, comisiones ni tasas.
- * Todos los cálculos son realizados por el backend para evitar manipulación.
- * 
- * Flujo:
- * 1. Usuario ingresa monto en USD
- * 2. Frontend llama a /public/calculate-operation
- * 3. Backend devuelve todos los valores calculados
- * 4. Frontend muestra los valores (sin modificarlos)
- * 5. Al reservar, se envían solo datos mínimos al backend que recalcula todo
- */
 const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved }) => {
   const [operationType, setOperationType] = useState<OperationType>(initialMode);
-
-  // Input del usuario: solo USD amount
   const [usdInput, setUsdInput] = useState<string>('');
-
-  // Datos calculados por el backend (NUNCA calculados en frontend)
   const [calculation, setCalculation] = useState<OperationCalculation | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [calculationError, setCalculationError] = useState<string | null>(null);
 
-  // Branch and method state
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
-  const [branchId, setBranchId] = useState<number | ''>('');
+  const [branchId, setBranchId] = useState<string>('');
   const [method, setMethod] = useState<string>('En sucursal');
 
-  // UI state
   const [error, setError] = useState<string | null>(null);
   const [negativeWarning, setNegativeWarning] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const socket = useSocket();
 
-  // Referencia para el debounce
   const calculateDebounceRef = useRef<ReturnType<typeof debounce> | null>(null);
 
-  // Tipos para payload de inventory.updated
   type InventoryItem = { amount: number; low_stock_threshold: number | null };
   type InventoryPayload = { transaction?: unknown; inventory?: Record<string, InventoryItem>; branch_id?: number };
 
-  // ============================================================================
-  // CÁLCULO VÍA BACKEND (única fuente de verdad)
-  // ============================================================================
   const fetchCalculation = useCallback(async (usdAmount: number, type: OperationType, branch?: number) => {
     if (usdAmount <= 0) {
       setCalculation(null);
@@ -78,8 +61,6 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
       if (response.success && response.calculation) {
         setCalculation(response.calculation);
-
-        // Verificar inventario
         if (response.calculation.inventory?.status === 'insufficient') {
           setCalculationError('Fondos insuficientes en esta sucursal para el monto solicitado.');
         }
@@ -87,16 +68,15 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
     } catch (err: unknown) {
       console.error('Error calculando operación:', err);
       const httpErr = err as { response?: { status?: number; data?: { message?: string } } };
-      setCalculationError(httpErr.response?.data?.message || 'Error calculando la operación. Intenta de nuevo.');
+      setCalculationError(httpErr.response?.data?.message || 'Error calculando la operación.');
       setCalculation(null);
     } finally {
       setIsCalculating(false);
     }
   }, []);
 
-  // Crear debounce para el cálculo
   useEffect(() => {
-    calculateDebounceRef.current = debounce((amount: string, type: OperationType, branch: number | '') => {
+    calculateDebounceRef.current = debounce((amount: string, type: OperationType, branch: string) => {
       const numAmount = parseFloat(amount);
       if (!isNaN(numAmount) && numAmount > 0) {
         fetchCalculation(numAmount, type, branch ? Number(branch) : undefined);
@@ -111,7 +91,6 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
     };
   }, [fetchCalculation]);
 
-  // Trigger cálculo cuando cambia el input, tipo de operación o sucursal
   useEffect(() => {
     if (usdInput && calculateDebounceRef.current) {
       calculateDebounceRef.current(usdInput, operationType, branchId);
@@ -121,23 +100,17 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
     }
   }, [usdInput, operationType, branchId]);
 
-  // Handler para cambio de input USD
   const handleUsdInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
-
-    // Detectar y eliminar signos negativos
     if (value.includes('-')) {
       value = value.replace(/-/g, '');
       setNegativeWarning(true);
-      // Ocultar el warning después de 3 segundos
       setTimeout(() => setNegativeWarning(false), 3000);
     }
-
     setUsdInput(value);
     setError(null);
   };
 
-  // Effect to switch operation type
   useEffect(() => {
     setOperationType(initialMode);
     setUsdInput('');
@@ -145,14 +118,13 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
     setCalculationError(null);
   }, [initialMode]);
 
-  // Effect to fetch branches on component mount
   useEffect(() => {
     (async () => {
       try {
         const branchList = await listBranches();
         setBranches(branchList.map(b => ({ id: b.id, name: b.name })));
         if (branchList.length > 0) {
-          setBranchId(branchList[0].id);
+          setBranchId(branchList[0].id.toString());
         }
       } catch (e) {
         console.error('Error loading branches', e);
@@ -161,35 +133,28 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
     })();
   }, []);
 
-  // Socket listener para actualizaciones de inventario
   useEffect(() => {
     const handler = (payload: unknown) => {
-      console.log('inventory.updated received in OperationForm:', payload);
       try {
         if (typeof payload === 'object' && payload !== null) {
           const p = payload as InventoryPayload;
-          if (p.branch_id && Number(p.branch_id) === Number(branchId)) {
-            // Refrescar cálculo si hay un monto ingresado
+          if (p.branch_id && branchId && Number(p.branch_id) === Number(branchId)) {
             if (usdInput && parseFloat(usdInput) > 0) {
-              fetchCalculation(parseFloat(usdInput), operationType, branchId ? Number(branchId) : undefined);
+              fetchCalculation(parseFloat(usdInput), operationType, Number(branchId));
             }
-
-            // Comprobar umbrales y mostrar toast si está por debajo
             const inv = p.inventory as Record<string, { amount: number; low_stock_threshold: number | null }> | undefined;
             if (inv) {
               Object.entries(inv).forEach(([currency, info]) => {
                 if (info && typeof info.amount === 'number' && typeof info.low_stock_threshold === 'number') {
                   if (info.amount <= info.low_stock_threshold) {
-                    toast.warning(`Inventario bajo en sucursal: ${currency} ${info.amount.toFixed(2)} (umbral ${info.low_stock_threshold.toFixed(2)})`);
+                    toast.warning(`Inventario bajo en sucursal: ${currency} ${info.amount.toFixed(2)}`);
                   }
                 }
               });
             }
           }
         }
-      } catch {
-        // noop
-      }
+      } catch { }
     };
 
     if (socket && socket.on) {
@@ -203,21 +168,15 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
     };
   }, [branchId, socket, usdInput, operationType, fetchCalculation]);
 
-  // ============================================================================
-  // RESERVAR OPERACIÓN
-  // El backend recalcula todo, solo enviamos datos mínimos
-  // ============================================================================
   const onReserve = async () => {
     if (!calculation) {
-      setError('Por favor ingresa un monto válido para calcular la operación.');
+      setError('Por favor ingresa un monto válido.');
       return;
     }
-
     if (!branchId) {
       setError('Debes seleccionar una sucursal.');
       return;
     }
-
     if (calculation.inventory?.status === 'insufficient') {
       setError('Fondos insuficientes en la sucursal seleccionada.');
       return;
@@ -226,20 +185,17 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
     setIsLoading(true);
     setError(null);
 
-    // Payload mínimo: el backend recalcula TODOS los valores
     const payload = {
-      branch_id: branchId,
+      branch_id: Number(branchId),
       type: operationType,
-      // Enviamos el monto USD que el usuario quiere (el backend recalcula todo lo demás)
       usd_amount: calculation.usd_amount,
-      // El método de pago solo es relevante para el flujo
       method: method,
     };
 
     try {
       const token = Cookies.get('token');
       if (!token) {
-        setError('Tu sesión ha expirado. Por favor, inicia sesión de nuevo.');
+        setError('Tu sesión ha expirado. Inicia sesión de nuevo.');
         setIsLoading(false);
         return;
       }
@@ -248,8 +204,6 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
 
       if (res.transaction?.transaction_code) {
         if (onReserved) onReserved(res.transaction.transaction_code);
-
-        // Emitir actualización de inventario por socket
         try {
           const branchIdNum = Number(branchId);
           const invFromRes = (res.inventory && typeof res.inventory === 'object') ? res.inventory as Record<string, unknown> : undefined;
@@ -261,30 +215,21 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
             }
           }
         } catch (e) {
-          console.warn('No se pudo emitir evento de socket inventory.updated', e);
+          console.warn('Socket error', e);
         }
       } else {
-        setError('No se pudo crear la transacción. Intenta nuevamente.');
-        return;
+        setError('No se pudo crear la transacción.');
       }
     } catch (err: unknown) {
-      console.error('Error creating transaction:', err);
       const httpErr = err as { response?: { status?: number; data?: { message?: string } } };
-      if (httpErr.response?.status === 409) {
-        setError(httpErr.response.data?.message || 'Fondos insuficientes.');
-      } else if (httpErr.response?.data?.message) {
-        setError(httpErr.response.data.message);
-      } else {
-        setError('Ocurrió un error inesperado al crear la transacción.');
-      }
+      setError(httpErr.response?.data?.message || 'Error al crear la transacción.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Cambiar tipo de operación
-  const switchOperationType = (newType: OperationType) => {
-    setOperationType(newType);
+  const switchOperationType = (newType: string) => {
+    setOperationType(newType as OperationType);
     setUsdInput('');
     setCalculation(null);
     setCalculationError(null);
@@ -294,221 +239,180 @@ const OperationForm: React.FC<Props> = ({ initialMode = 'buy', rates, onReserved
   };
 
   return (
-    <div className="bg-white shadow-sm p-4 border border-gray-300 rounded-lg w-full overflow-x-hidden">
-      <header className="flex sm:flex-row flex-col justify-between items-start sm:items-center gap-3 mb-4">
-        <h3 className="font-semibold text-primary text-lg">Generar Orden</h3>
-        <div className="flex sm:flex-row flex-col items-stretch sm:items-center gap-2 w-full sm:w-auto">
-          <button
-            className={`cursor-pointer flex-1 sm:flex-none min-w-[140px] px-3 py-2 rounded-md font-medium ${operationType === 'buy' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
-            onClick={() => switchOperationType('buy')}
-          >
-            Quiero Comprar Dólares
-          </button>
-          <button
-            className={`cursor-pointer flex-1 sm:flex-none min-w-[140px] px-3 py-2 rounded-md font-medium ${operationType === 'sell' ? 'bg-primary hover:bg-primary/90 text-white' : 'bg-white text-primary border border-light-green hover:bg-accent/50'}`}
-            onClick={() => switchOperationType('sell')}
-          >
-            Quiero Vender Dólares
-          </button>
-        </div>
-      </header>
+    <Card className="w-full shadow-lg ">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-2xl text-center">Cotizador de Divisas</CardTitle>
+        <CardDescription className="text-center">
+          Consulta el tipo de cambio en tiempo real y reserva tu operación
+        </CardDescription>
+      </CardHeader>
 
-      <div className="gap-4 grid grid-cols-1">
-        {/* Input principal: siempre USD */}
-        <div>
-          <label className="block mb-2 font-medium text-primary">
-            {operationType === 'buy'
-              ? '¿Cuántos Dólares Quieres Comprar?'
-              : '¿Cuántos Dólares Quieres Vender?'}
-          </label>
-          <div className="relative">
-            <NumberInput
-              value={usdInput}
-              onChange={handleUsdInputChange}
-              placeholder="0.00"
-              decimals={2}
-              className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg"
-              disabled={isLoading}
-            />
-            <span className="top-1/2 right-3 absolute font-semibold text-gray-500 -translate-y-1/2">USD</span>
-          </div>
-          <p className="mt-1 text-gray-500 text-xs">Mínimo: $1 USD • Máximo: $50,000 USD</p>
-          {negativeWarning && (
-            <p className="mt-1 font-medium text-red-500 text-xs">
-              ⚠ No se permiten números negativos
-            </p>
-          )}
+      <Tabs value={operationType} onValueChange={switchOperationType} className="w-full">
+        <div className="px-6">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="buy" className="font-bold">Quiero Comprar USD</TabsTrigger>
+            <TabsTrigger value="sell" className="font-bold">Quiero Vender USD</TabsTrigger>
+          </TabsList>
         </div>
 
-        {/* Indicador de cálculo */}
-        {isCalculating && (
-          <div className="flex items-center gap-2 text-gray-500 text-sm">
-            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            Calculando...
+        <CardContent className="space-y-6">
+          {/* Paso 1: Monto */}
+          <div className="space-y-2">
+            <Label htmlFor="amount" className="text-base font-semibold flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              {operationType === 'buy' ? '¿Cuántos dólares quieres comprar?' : '¿Cuántos dólares quieres vender?'}
+            </Label>
+            <div className="relative">
+              <NumberInput
+                id="amount"
+                value={usdInput}
+                onChange={handleUsdInputChange}
+                placeholder="0.00"
+                decimals={2}
+                className="pl-4 pr-12 py-6 text-lg font-medium"
+                disabled={isLoading}
+              />
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground font-bold">
+                USD
+              </div>
+            </div>
+            {negativeWarning && (
+              <p className="text-xs text-destructive font-medium">No se permiten números negativos</p>
+            )}
           </div>
-        )}
 
-        {/* Error de cálculo */}
-        {calculationError && !isCalculating && (
-          <Alert variant="destructive">
-            <AlertDescription>{calculationError}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Información calculada por el backend */}
-        {calculation && !isCalculating && !calculationError && (
-          <div className="bg-gray-50 p-4 border border-gray-200 rounded-lg text-sm" aria-live="polite">
-            {/* Tasas */}
-            <div className="mb-3">
-              <span className="font-medium text-gray-700">
-                Tasa de {operationType === 'buy' ? 'Compra' : 'Venta'}:
-              </span>
-              <span className="ml-2 text-gray-600">
-                1 USD = {calculation.base_rate.toFixed(4)} MXN
-              </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Paso 2: Sucursal */}
+            <div className="space-y-2">
+              <Label htmlFor="branch" className="text-base font-semibold flex items-center gap-2">
+                <Building2 className="w-4 h-4" />
+                Sucursal
+              </Label>
+              <Select value={branchId} onValueChange={setBranchId} disabled={isLoading}>
+                <SelectTrigger id="branch" className="h-12">
+                  <SelectValue placeholder="Selecciona una sucursal" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id.toString()}>
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Desglose de la operación */}
-            <div className="space-y-2 pt-3 border-gray-200 border-t">
-              {operationType === 'buy' ? (
-                <>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto] text-sm">
-                    <span className="text-gray-600 break-words">Dólares a comprar:</span>
-                    <span className="font-medium text-gray-800">${calculation.usd_amount.toFixed(2)} USD</span>
-                  </div>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
-                    <span className="text-gray-600 break-words">Tasa base:</span>
-                    <span className="font-medium text-gray-800">{calculation.base_rate.toFixed(4)} MXN/USD</span>
-                  </div>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
-                    <span className="text-gray-600 break-words">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
-                    <span className="font-medium text-gray-800">{calculation.effective_rate.toFixed(4)} MXN/USD</span>
-                  </div>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
-                    <span className="text-gray-600 break-words">Comisión sucursal:</span>
-                    <span className="font-medium text-red-600">${calculation.commission_mxn.toLocaleString()} MXN</span>
-                  </div>
-                  <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-green-800">Tú recibirás:</span>
-                      <span className="font-bold text-green-900 text-lg">${calculation.usd_amount.toFixed(2)} USD</span>
-                    </div>
-                    <div className="flex justify-between items-center mt-1 text-green-700 text-xs">
-                      <span>Pagas en total:</span>
-                      <span>${calculation.mxn_amount.toLocaleString()} MXN</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto] text-sm">
-                    <span className="text-gray-600 break-words">Dólares a entregar:</span>
-                    <span className="font-medium text-gray-800">${calculation.usd_amount.toFixed(2)} USD</span>
-                  </div>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
-                    <span className="text-gray-600 break-words">Tasa base:</span>
-                    <span className="font-medium text-gray-800">{calculation.base_rate.toFixed(4)} MXN/USD</span>
-                  </div>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
-                    <span className="text-gray-600 break-words">Tasa aplicada (con comisión {calculation.commission_percent}%):</span>
-                    <span className="font-medium text-gray-800">{calculation.effective_rate.toFixed(4)} MXN/USD</span>
-                  </div>
-                  <div className="items-center gap-2 grid grid-cols-[1fr_auto]">
-                    <span className="text-gray-600 break-words">Comisión sucursal:</span>
-                    <span className="font-medium text-red-600">${calculation.commission_mxn.toLocaleString()} MXN</span>
-                  </div>
-                  <div className="bg-green-50 mt-3 p-3 border border-green-200 rounded-md">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold text-green-800">Tú recibirás:</span>
-                      <span className="font-bold text-green-900 text-lg">${calculation.mxn_amount.toLocaleString()} MXN</span>
-                    </div>
-                    <div className="flex justify-between items-center mt-1 text-green-700 text-xs">
-                      <span>Entregas:</span>
-                      <span>${calculation.usd_amount.toFixed(2)} USD</span>
-                    </div>
-                  </div>
-                </>
-              )}
+            {/* Paso 3: Método (Solo Compra) */}
+            {operationType === 'buy' && (
+              <div className="space-y-2">
+                <Label htmlFor="method" className="text-base font-semibold flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  Método de Pago
+                </Label>
+                <Select value={method} onValueChange={setMethod} disabled={isLoading}>
+                  <SelectTrigger id="method" className="h-12">
+                    <SelectValue placeholder="Selecciona método" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="En sucursal">Efectivo en sucursal</SelectItem>
+                    <SelectItem value="Tarjeta">Tarjeta (Débito/Prepago)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
 
-              {/* Estado del inventario */}
+          {/* Estado de Cálculo */}
+          {isCalculating && (
+            <div className="flex items-center justify-center py-4 text-muted-foreground animate-pulse">
+              <Calculator className="w-5 h-5 mr-2" />
+              Calculando cotización...
+            </div>
+          )}
+
+          {/* Errores de Cálculo */}
+          {calculationError && !isCalculating && (
+            <Alert variant="destructive">
+              <Info className="h-4 w-4" />
+              <AlertTitle>Atención</AlertTitle>
+              <AlertDescription>{calculationError}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Resumen de la Operación */}
+          {calculation && !isCalculating && !calculationError && (
+            <div className="bg-muted/50 rounded-xl p-4 border border-border space-y-4 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Tipo de Cambio Base</span>
+                <span className="font-medium">{calculation.base_rate.toFixed(4)} MXN</span>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    {operationType === 'buy' ? 'Monto a recibir' : 'Monto a entregar'}
+                  </span>
+                  <span className="font-medium">${calculation.usd_amount.toFixed(2)} USD</span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Comisión ({calculation.commission_percent}%)</span>
+                  <span className="text-destructive font-medium">+ ${calculation.commission_mxn.toLocaleString()} MXN</span>
+                </div>
+
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-base font-semibold text-primary">
+                    {operationType === 'buy' ? 'Total a Pagar' : 'Total a Recibir'}
+                  </span>
+                  <span className="text-xl font-bold text-primary">
+                    ${calculation.mxn_amount.toLocaleString()} MXN
+                  </span>
+                </div>
+              </div>
+
               {calculation.inventory && (
-                <div className={`mt-2 text-xs break-words ${calculation.inventory.status === 'available' ? 'text-green-600' : 'text-orange-600'}`}>
+                <div className={`text-xs flex items-center gap-1.5 ${calculation.inventory.status === 'available' ? 'text-green-600' : 'text-orange-600'}`}>
+                  <div className={`w-2 h-2 rounded-full ${calculation.inventory.status === 'available' ? 'bg-green-600' : 'bg-orange-600'}`} />
                   {calculation.inventory.status === 'available'
-                    ? '✓ Fondos disponibles en esta sucursal'
-                    : '⚠ Fondos insuficientes en esta sucursal'}
+                    ? 'Fondos disponibles para entrega inmediata'
+                    : 'Fondos limitados en esta sucursal'}
                 </div>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Sucursal y Método de pago */}
-        <div className="flex sm:flex-row flex-col gap-3">
-          <div className="flex-1">
-            <label htmlFor="branch" className="block mb-2 font-medium text-primary">Sucursal:</label>
-            <select
-              id="branch"
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value === '' ? '' : Number(e.target.value))}
-              className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer"
-              disabled={isLoading}
-            >
-              {branches.length > 0 ? (
-                branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)
-              ) : (
-                <option>Cargando sucursales...</option>
-              )}
-            </select>
-          </div>
-
-          {/* Método de pago solo para compra */}
-          {operationType === 'buy' && (
-            <div className="flex-1">
-              <label htmlFor="method" className="block mb-2 font-medium text-primary">Método de Pago:</label>
-              <select
-                id="method"
-                value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                className="p-3 border-2 border-light-green focus:border-secondary rounded-lg focus:outline-none w-full font-['Roboto'] text-lg cursor-pointer"
-                disabled={isLoading}
-              >
-                <option value="En sucursal">En sucursal (efectivo)</option>
-                <option value="Tarjeta">Tarjeta de débito/prepago</option>
-              </select>
-            </div>
           )}
-        </div>
 
-        {/* Error Display */}
-        {error && (
-          <Alert variant="destructive" className="mt-2">
-            <AlertTitle>Error en la operación</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+          {/* Error General */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
 
-        {/* Action Button */}
-        <div className="mt-2">
-          <button
-            className="bg-primary hover:bg-primary/90 disabled:opacity-50 px-4 py-3 rounded-lg w-full font-medium text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+        <CardFooter className="pt-6">
+          <Button
+            className="w-full h-12 text-lg font-semibold shadow-md cursor-pointer"
+            size="lg"
             onClick={onReserve}
             disabled={isLoading || isCalculating || !calculation || !!calculationError}
           >
             {isLoading ? (
-              <div className="flex justify-center items-center">
-                <Spinner className="mr-2 w-4 h-4 text-white" />
-                Procesando orden...
-              </div>
+              <>
+                <Spinner className="mr-2 h-5 w-5" />
+                Procesando...
+              </>
             ) : (
-              'Revisar Orden'
+              <>
+                Confirmar Orden <ArrowRight className="ml-2 h-5 w-5" />
+              </>
             )}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </CardFooter>
+      </Tabs>
+    </Card>
   );
 }
 

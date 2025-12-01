@@ -86,7 +86,6 @@ const useUtils = () => {
       const currentTime = Math.floor(Date.now() / 1000);
       return decodedPayload.exp < currentTime;
     } catch (error) {
-      console.log("error al detectar expiracion del token");
       return true;
     }
   };

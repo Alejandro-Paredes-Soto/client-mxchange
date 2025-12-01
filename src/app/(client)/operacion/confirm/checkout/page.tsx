@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
@@ -9,7 +9,7 @@ import StripeCheckout from '@/components/StripeCheckout';
 import { BackendTransaction, getUserTransactions } from '@/app/services/api';
 import { Button } from '@/components/ui/button';
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const params = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
@@ -116,4 +116,12 @@ export default function CheckoutPage() {
         </section>
     </section>
   );
-} 
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Cargando…</div>}>
+      <CheckoutContent />
+    </Suspense>
+  );
+}

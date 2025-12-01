@@ -47,10 +47,7 @@ const Inicio = () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const isValidToken = (session as any)?.isValidToken;
       
-      console.log('🔍 [inicio/page] Google Login detected');
-      console.log('🔍 [inicio/page] token:', token ? `${token.substring(0, 50)}...` : 'undefined');
-      console.log('🔍 [inicio/page] idUser:', idUser);
-      console.log('🔍 [inicio/page] isValidToken:', isValidToken);
+    
       
       if (token && token !== "undefined" && token !== "null") {
         localStorage.setItem("email", session.user?.email == null ? "" : session.user?.email);
@@ -62,18 +59,15 @@ const Inicio = () => {
         // isValidToken es el payload decodificado del JWT, que contiene { id, email, role, branch_id, iat, exp }
         const tokenIsValid = isValidToken && typeof isValidToken === 'object' && (isValidToken.id || isValidToken.idUser);
         
-        console.log('🔍 [inicio/page] tokenIsValid:', tokenIsValid);
         
         if (tokenIsValid) {
           localStorage.setItem("token", token);
           // IMPORTANTE: También guardar el token en cookies para que OperationForm y otros componentes lo puedan usar
           Cookies.set('token', token, { path: '/', expires: 0.33 }); // expires en 0.33 días = 8 horas (igual que el JWT)
-          console.log('✅ [inicio/page] Token guardado en localStorage y cookies');
           setTokenReady(true);
         } else {
           localStorage.removeItem("token");
           Cookies.remove('token', { path: '/' });
-          console.log('❌ [inicio/page] Token inválido, removido de localStorage y cookies');
           setTokenReady(false);
         }
       }

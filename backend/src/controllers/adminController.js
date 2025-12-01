@@ -969,9 +969,65 @@ const getRecentTransactions = async (req, res, next) => {
   }
 };
 
+const bcrypt = require('bcrypt');
+
+const createUser = async (req, res, next) => {
+  try {
+    const { name, email, password, role, branch_id } = req.body;
+    
+    // Validaciones básicas
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Nombre, email y contraseña son requeridos' });
+    }
+    
+    if (!role || !['client', 'admin', 'sucursal'].includes(role)) {
+      return res.status(400).json({ message: 'Rol inválido. Debe ser client, admin o sucursal' });
+    }
+    
+    // Si el rol es sucursal, branch_id es requerido
+    if (role === 'sucursal' && !branch_id) {
+      return res.status(400).json({ message: 'Debes seleccionar una sucursal para el rol sucursal' });
+    }
+    
+    // Verificar si el email ya existe
+    const [existingUser] = await pool.query('SELECT idUser FROM users WHERE email = ?', [email]);
+    if (existingUser.length > 0) {
+      return res.status(409).json({ message: 'Ya existe un usuario con este correo electrónico' });
+    }
+    
+    // Si el rol es sucursal, verificar que la sucursal existe
+    if (role === 'sucursal') {
+      const [branchRows] = await pool.query('SELECT id FROM branches WHERE id = ?', [branch_id]);
+      if (branchRows.length === 0) {
+        return res.status(404).json({ message: 'Sucursal no encontrada' });
+      }
+    }
+    
+    // Hashear la contraseña
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Crear el usuario
+    const finalBranchId = role === 'sucursal' ? branch_id : null;
+    const [result] = await pool.query(
+      'INSERT INTO users (name, email, password, role, branch_id, active, auth_provider) VALUES (?, ?, ?, ?, ?, 1, ?)',
+      [name, email, hashedPassword, role, finalBranchId, 'email']
+    );
+    
+    // Obtener el usuario creado
+    const [newUser] = await pool.query(
+      'SELECT idUser, name, email, role, branch_id, active, createdAt FROM users WHERE idUser = ?',
+      [result.insertId]
+    );
+    
+    return res.status(201).json({ message: 'Usuario creado correctamente', user: newUser[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const listUsers = async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT idUser, name, email, role, active, createdAt FROM users ORDER BY createdAt DESC');
+    const [rows] = await pool.query('SELECT idUser, name, email, role, branch_id, active, createdAt FROM users ORDER BY createdAt DESC');
     return res.json({ users: rows });
   } catch (err) {
     next(err);
@@ -996,6 +1052,39 @@ const toggleUserStatus = async (req, res, next) => {
     if (active == null) return res.status(400).json({ message: 'active required' });
     await pool.query('UPDATE users SET active = ? WHERE idUser = ?', [active, id]);
     return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const updateUserRole = async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const { role, branch_id } = req.body;
+    
+    if (!role) return res.status(400).json({ message: 'role required' });
+    if (!['client', 'admin', 'sucursal'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role. Must be client, admin, or sucursal' });
+    }
+    
+    // Si el rol es sucursal, branch_id es requerido
+    if (role === 'sucursal' && !branch_id) {
+      return res.status(400).json({ message: 'branch_id required for sucursal role' });
+    }
+    
+    // Si el rol es sucursal, verificar que la sucursal existe
+    if (role === 'sucursal') {
+      const [branchRows] = await pool.query('SELECT id FROM branches WHERE id = ?', [branch_id]);
+      if (branchRows.length === 0) {
+        return res.status(404).json({ message: 'Branch not found' });
+      }
+    }
+    
+    // Actualizar el rol y branch_id (null si no es sucursal)
+    const finalBranchId = role === 'sucursal' ? branch_id : null;
+    await pool.query('UPDATE users SET role = ?, branch_id = ? WHERE idUser = ?', [role, finalBranchId, id]);
+    
+    return res.json({ ok: true, message: 'User role updated successfully' });
   } catch (err) {
     next(err);
   }
@@ -1313,7 +1402,7 @@ const updateExpirationSettings = async (req, res, next) => {
   }
 };
 
-module.exports = { 
+module.exports = {
   getInventory, 
   updateInventory, 
   listAllTransactions, 
@@ -1322,9 +1411,11 @@ module.exports = {
   getDashboardChartData, 
   getInventorySummary, 
   getRecentTransactions, 
+  createUser,
   listUsers, 
   getUserProfile, 
   toggleUserStatus, 
+  updateUserRole,
   getCurrentRates, 
   updateRates, 
   listBranches, 

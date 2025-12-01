@@ -13,7 +13,6 @@ let debugListenersBound = false;
 export function getSocket(): Socket {
   if (!socket) {
     const url = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/$/, '');
-    console.log('Initializing socket.io-client to', url);
     const token = (typeof window !== 'undefined') ? Cookies.get('token') : undefined;
     
     socket = io(url, { 
@@ -58,7 +57,6 @@ export function closeSocket() {
     socket.disconnect();
     socket = null;
     debugListenersBound = false;
-    console.log('Socket closed and all listeners removed');
   }
 }
 

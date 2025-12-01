@@ -1,11 +1,11 @@
 "use client";
-import React from 'react';
+import React, { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getRatesMock, Rates } from '../../services/api';
 import { useEffect, useState } from 'react';
 import OperationForm from '@/components/OperationForm';
 
-const OperacionPage = () => {
+function OperacionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const modeParam = searchParams?.get('mode');
@@ -27,4 +27,10 @@ const OperacionPage = () => {
   );
 }
 
-export default OperacionPage;
+export default function OperacionPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Cargando…</div>}>
+      <OperacionContent />
+    </Suspense>
+  );
+}

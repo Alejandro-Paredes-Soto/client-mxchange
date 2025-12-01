@@ -26,7 +26,6 @@ const handler = NextAuth({
         // Leer la cookie para saber si es login o register
         const cookieStore = await cookies();
         const googleAuthAction = cookieStore.get('googleAuthAction')?.value || 'login';
-        console.log('🔐 NextAuth signIn - action from cookie:', googleAuthAction);
         
         const resp = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/user/loginGoogle`,

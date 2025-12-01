@@ -22,7 +22,6 @@ export async function getRatesMock(): Promise<Rates> {
         }
         
         // Fallback si no hay backend configurado
-        console.log('getRatesMock: using fallback rates');
         return { 
             usd: { buy: 17.8, sell: 18.2 }, 
             lastUpdated: Date.now() 
@@ -299,6 +298,7 @@ export type AdminUser = {
     role: string;
     active: boolean | number; // MySQL devuelve 0/1, TypeScript espera boolean
     createdAt: string;
+    branch_id?: number | null;
 };
 
 export async function getAdminUsers(token?: string): Promise<AdminUser[]> {
@@ -311,6 +311,26 @@ export async function getAdminUsers(token?: string): Promise<AdminUser[]> {
     } catch (e) {
         console.error('getAdminUsers error', e);
         return [];
+    }
+}
+
+export async function createAdminUser(
+    userData: { name: string; email: string; password: string; role: string; branch_id?: number | null },
+    token?: string
+): Promise<{ user?: AdminUser; error?: string }> {
+    if (!API_BASE) return { error: 'no-api' };
+    try {
+        const res = await fetch(`${API_BASE}/admin/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify(userData),
+        });
+        const data = await res.json();
+        if (!res.ok) return { error: data.message || 'Error al crear usuario' };
+        return { user: data.user };
+    } catch (e) {
+        console.error('createAdminUser error', e);
+        return { error: 'Error de conexión' };
     }
 }
 
@@ -328,6 +348,36 @@ export async function toggleUserStatus(userId: number, active: boolean, token?: 
     } catch (e) {
         console.error('toggleUserStatus error', e);
         return { error: e };
+    }
+}
+
+export async function updateUserRole(userId: number, role: string, branchId: number | null, token?: string) {
+    if (!API_BASE) return { error: 'no-api' };
+    try {
+        const res = await fetch(`${API_BASE}/admin/users/${userId}/role`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ role, branch_id: branchId }),
+        });
+        const data = await res.json();
+        if (!res.ok) return { error: data };
+        return data;
+    } catch (e) {
+        console.error('updateUserRole error', e);
+        return { error: e };
+    }
+}
+
+export async function getAdminBranches(token?: string): Promise<{ id: number; name: string; address: string; city: string; state: string }[]> {
+    if (!API_BASE) return [];
+    try {
+        const res = await fetch(`${API_BASE}/admin/config/branches`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }, cache: 'no-store' });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.branches || [];
+    } catch (e) {
+        console.error('getAdminBranches error', e);
+        return [];
     }
 }
 

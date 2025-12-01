@@ -69,9 +69,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const { notifications, unreadCount, markAllAsRead, reloadFromServer } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userData, setUserData] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
-    // Decodificar el token para obtener el rol del usuario
+    // Decodificar el token para obtener el rol y datos del usuario
     const token = Cookies.get('token');
     if (token) {
       try {
@@ -79,6 +80,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         if (parts.length === 3) {
           const payload = JSON.parse(atob(parts[1]));
           setUserRole(payload.role || null);
+          setUserData({ name: payload.name || '', email: payload.email || '' });
         }
       } catch (err) {
         console.error('Error decoding token:', err);
@@ -86,9 +88,6 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  console.log('[ADMIN] notifications:', notifications);
-  console.log('[ADMIN] unreadCount:', unreadCount);
-  console.log('[ADMIN] userRole:', userRole);
 
   async function handleLogout() {
     try {
@@ -106,12 +105,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   const handleOpenNotifications = async (open: boolean) => {
-    console.log('[handleOpenNotifications] open:', open);
     if (open) {
       // Marcar como leídas inmediatamente cuando se abre el panel
-      console.log('[handleOpenNotifications] Llamando a markAllAsRead...');
       await markAllAsRead();
-      console.log('[handleOpenNotifications] markAllAsRead completado');
     }
     setNotifOpen(open);
   };
@@ -157,6 +153,12 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
           </SidebarGroup>
         </SidebarContent>
         <div className="mt-auto px-4 py-4">
+          {userData && (
+            <div className="mb-3">
+              <p className="font-medium text-sm truncate">{userData.name}</p>
+              <p className="text-muted-foreground text-xs truncate">{userData.email}</p>
+            </div>
+          )}
           <hr className="mb-4 border-gray-300" />
           <SidebarMenu>
             <SidebarMenuItem>

@@ -1,6 +1,6 @@
 "use client";
+import { Transaction } from "@/app/services/api";
 import React from "react";
-import { Transaction } from "../services/api";
 
 const TransactionList: React.FC<{ items: Transaction[] }> = ({ items }) => {
   if (!items || items.length === 0) {

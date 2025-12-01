@@ -19,8 +19,10 @@ router.get('/dashboard/recent-transactions', authenticate, isSucursalOrAdmin, ad
 
 // Rutas exclusivas de admin (gestión de usuarios, sucursales, tasas, etc.)
 router.get('/users', authenticate, isAdmin, adminController.listUsers);
+router.post('/users', authenticate, isAdmin, adminController.createUser);
 router.get('/users/:id', authenticate, isAdmin, adminController.getUserProfile);
 router.put('/users/:id/status', authenticate, isAdmin, adminController.toggleUserStatus);
+router.put('/users/:id/role', authenticate, isAdmin, adminController.updateUserRole);
 router.get('/config/rates', authenticate, isAdmin, adminController.getCurrentRates);
 router.put('/config/rates', authenticate, isAdmin, adminController.updateRates);
 router.get('/config/branches', authenticate, isAdmin, adminController.listBranches);

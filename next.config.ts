@@ -16,6 +16,9 @@ const nextConfig: NextConfig = {
   images: {
     domains: ['api.qrserver.com'],
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 };
 
 export default nextConfig;

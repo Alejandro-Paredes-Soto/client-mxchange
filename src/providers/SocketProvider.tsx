@@ -49,7 +49,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let userId = s?.idUser || s?.user?.id || s?.id || null;
     let roleRaw = s?.rol || s?.role || s?.user?.role || s?.user?.rol || '';
     let branchId = s?.branch_id || s?.user?.branch_id || null;
-    
+
     if (!userId || !roleRaw) {
       const token = Cookies.get('token') || '';
       const payload = token ? parseJwt(token) : null;
@@ -66,26 +66,24 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const reloadFromServer = useCallback(async () => {
     try {
       const { userId, role } = getSessionInfo();
-      
+
       // CORRECCIÓN: Validar que haya userId O que sea admin O que sea sucursal
       if (!userId && role !== 'admin' && role !== 'sucursal') {
-        console.log('No hay sesión válida para cargar notificaciones');
         setNotifications([]);
         return;
       }
 
       const token = Cookies.get('token') || '';
-      
+
       if (!token) {
         console.warn('No hay token disponible para cargar notificaciones');
         setNotifications([]);
         return;
       }
 
-      console.log('Cargando notificaciones para userId:', userId, 'role:', role);
 
       const res = await fetch(`${API_BASE}/notifications`, {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
@@ -99,7 +97,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       const j = await res.json();
-      console.log('Notificaciones recibidas:', j);
 
       const list = Array.isArray(j.notifications) ? j.notifications : [];
       setNotifications(list.map((n: any) => ({
@@ -117,7 +114,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     const s = getSocket();
-    
+
     // Definir handlers como funciones nombradas para poder removerlas después
     const onConnect = () => console.log('Socket connected:', s.id);
     const onDisconnect = () => console.log('Socket disconnected');
@@ -130,7 +127,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Registrar sala con base en la sesión (admin, sucursal o usuario)
     try {
       const { userId, role, branchId } = getSessionInfo();
-      console.log('Registrando socket con userId:', userId, 'role:', role, 'branchId:', branchId);
       if (role === 'admin' || role === 'sucursal' || userId) {
         s.emit('register', { userId, role, branchId });
       }
@@ -141,16 +137,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Escuchar notificaciones genéricas
     const onNotification = (payload: { title: string; message: string; event_type?: string; transaction_id?: number | string; created_at?: string }) => {
       try {
-        console.log('Nueva notificación recibida:', payload);
         const key = payload.transaction_id ? `tx:${payload.transaction_id}` : `note:${payload.title}:${payload.message}`;
         const now = Date.now();
         const last = recentKeysRef.current.get(key) || 0;
         if (now - last < DEDUP_MS) {
-          console.log('Notificación duplicada ignorada por dedupe:', key);
           return;
         }
         recentKeysRef.current.set(key, now);
-        
+
         // Mostrar notificación según el tipo
         if (payload.event_type === 'low_inventory') {
           // Alerta de inventario bajo - usar toast de advertencia o error
@@ -171,7 +165,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             description: payload.message || '',
           });
         }
-        
+
         setNotifications(prev => [{ ...payload, read: false }, ...prev].slice(0, 100));
       } catch (err) {
         console.log('Notification error:', err, payload);
@@ -182,7 +176,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Fallback: algunos backends emiten 'notifications' (plural) con una lista
     const onNotificationsArray = (payload: unknown) => {
       try {
-        console.log('notifications (array) recibidas:', payload);
         if (Array.isArray(payload)) {
           const now = Date.now();
           const toAdd: AppNotification[] = [];
@@ -212,7 +205,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // NO muestra notificaciones toast porque las notificaciones específicas llegan vía 'notification'
     const onInventoryUpdated = (payload: unknown) => {
       try {
-        console.log('inventory.updated global recibido en SocketProvider:', payload);
         // Solo registrar el evento, no mostrar toast ni añadir a notificaciones
         // Las notificaciones específicas llegarán por el evento 'notification'
       } catch (err) {
@@ -246,7 +238,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       });
       if (cleaned > 0) {
-        console.log(`[SocketProvider] Limpiados ${cleaned} keys de deduplicación expirados`);
+        // console.log(`Limpieza de recentKeys: eliminadas ${cleaned} entradas antiguas`);
       }
     }, 60000); // Cada minuto
 
@@ -260,38 +252,33 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setNotifications([]);
       return;
     }
-    console.log('Llamando a reloadFromServer...');
     reloadFromServer();
   }, [reloadFromServer, getSessionInfo]);
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
-  
+
   const markAllAsRead = useCallback(async () => {
     try {
-      console.log('[markAllAsRead] Iniciando...');
       const token = Cookies.get('token') || '';
-      
+
       if (!token) {
         console.error('[markAllAsRead] No hay token disponible');
         return;
       }
-      
+
       // Primero actualizar el estado local inmediatamente para feedback instantáneo
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      console.log('[markAllAsRead] Estado local actualizado');
-      
+
       // Luego hacer la petición al servidor
-      console.log('[markAllAsRead] Llamando a API:', `${API_BASE}/notifications/mark-read`);
       const response = await fetch(`${API_BASE}/notifications/mark-read`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
       });
-      
-      console.log('[markAllAsRead] Respuesta del servidor:', response.status);
-      
+
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[markAllAsRead] Error del servidor:', response.status, errorText);
@@ -299,7 +286,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         await reloadFromServer();
       } else {
         const data = await response.json();
-        console.log('[markAllAsRead] Éxito:', data);
       }
     } catch (e) {
       console.error('[markAllAsRead] Error:', e);
@@ -309,7 +295,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [API_BASE, reloadFromServer]);
 
   const contextValue = useMemo<SocketContextValue>(
-    () => ({ notifications, unreadCount, markAllAsRead, reloadFromServer }), 
+    () => ({ notifications, unreadCount, markAllAsRead, reloadFromServer }),
     [notifications, unreadCount, reloadFromServer, markAllAsRead]
   );
 
@@ -328,11 +314,11 @@ export function useSocket() {
 
 export function useNotifications() {
   const ctx = useContext(SocketContext);
-  if (!ctx) return { 
-    notifications: [], 
-    unreadCount: 0, 
-    markAllAsRead: async () => { }, 
-    reloadFromServer: async () => { } 
+  if (!ctx) return {
+    notifications: [],
+    unreadCount: 0,
+    markAllAsRead: async () => { },
+    reloadFromServer: async () => { }
   } as SocketContextValue;
   return ctx;
 }
